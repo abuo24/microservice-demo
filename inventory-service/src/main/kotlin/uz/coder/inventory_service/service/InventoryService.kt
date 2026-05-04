@@ -1,8 +1,6 @@
 package uz.coder.inventory_service.service
 
 import org.slf4j.LoggerFactory
-import org.springframework.cache.annotation.CacheEvict
-import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uz.coder.inventory_service.domain.InventoryItem
@@ -20,7 +18,6 @@ class InventoryService(private val inventoryRepository: InventoryRepository) {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @Cacheable(value = ["inventory"], key = "#productId")
     fun findByProductId(productId: String): InventoryResponse {
         log.info("Finding inventory productId={}", productId)
         return inventoryRepository.findByProductId(productId)
@@ -62,12 +59,10 @@ class InventoryService(private val inventoryRepository: InventoryRepository) {
     }
 
     @Transactional
-    @CacheEvict(value = ["inventory"], key = "#productId")
     fun reserveStock(productId: String, quantity: Int): InventoryResponse {
         log.info("Reserving stock productId={} quantity={}", productId, quantity)
         val item = inventoryRepository.findByProductIdForUpdate(productId)
             .orElseThrow { InventoryNotFoundException("Inventory not found for productId: $productId") }
-
         if (item.availableQuantity < quantity) {
             throw InsufficientStockException(
                 "Insufficient stock for productId=$productId: available=${item.availableQuantity}, requested=$quantity"
@@ -79,24 +74,20 @@ class InventoryService(private val inventoryRepository: InventoryRepository) {
     }
 
     @Transactional
-    @CacheEvict(value = ["inventory"], key = "#productId")
     fun releaseReservation(productId: String, quantity: Int): InventoryResponse {
         log.info("Releasing reservation productId={} quantity={}", productId, quantity)
         val item = inventoryRepository.findByProductIdForUpdate(productId)
             .orElseThrow { InventoryNotFoundException("Inventory not found for productId: $productId") }
-
         item.reservedQuantity = maxOf(0, item.reservedQuantity - quantity)
         item.updatedAt = Instant.now()
         return InventoryResponse.from(inventoryRepository.save(item))
     }
 
     @Transactional
-    @CacheEvict(value = ["inventory"], key = "#productId")
     fun confirmDeduction(productId: String, quantity: Int): InventoryResponse {
         log.info("Confirming deduction productId={} quantity={}", productId, quantity)
         val item = inventoryRepository.findByProductIdForUpdate(productId)
             .orElseThrow { InventoryNotFoundException("Inventory not found for productId: $productId") }
-
         item.quantity = maxOf(0, item.quantity - quantity)
         item.reservedQuantity = maxOf(0, item.reservedQuantity - quantity)
         item.updatedAt = Instant.now()

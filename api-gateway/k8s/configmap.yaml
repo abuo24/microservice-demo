@@ -6,9 +6,4 @@ metadata:
   labels:
     app: api-gateway
 data:
-  REDIS_HOST: "redis"
-  REDIS_PORT: "6379"
-  ZIPKIN_ENDPOINT: "http://zipkin:9411/api/v2/spans"
-  JWT_ISSUER_URI: "http://keycloak:8080/realms/microservices"
-  JWT_JWK_SET_URI: "http://keycloak:8080/realms/microservices/protocol/openid-connect/certs"
   SPRING_PROFILES_ACTIVE: "kubernetes"

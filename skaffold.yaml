@@ -31,10 +31,10 @@ manifests:
   rawYaml:
     - k8s/namespace.yaml
     - k8s/postgres.yaml
-    - k8s/redis.yaml
-    - k8s/kafka.yaml
-    - k8s/zipkin.yaml
-    - k8s/keycloak.yaml
+#    - k8s/redis.yaml
+#    - k8s/kafka.yaml
+#    - k8s/zipkin.yaml
+#    - k8s/keycloak.yaml
     - api-gateway/k8s/serviceaccount.yaml
     - api-gateway/k8s/configmap.yaml
     - api-gateway/k8s/secret.yaml
@@ -60,17 +60,16 @@ profiles:
       rawYaml:
         - k8s/namespace.yaml
         - k8s/postgres.yaml
-        - k8s/redis.yaml
-        - k8s/kafka.yaml
-        - k8s/zipkin.yaml
-        - k8s/keycloak.yaml
+#        - k8s/redis.yaml
+#        - k8s/kafka.yaml
+#        - k8s/zipkin.yaml
+#        - k8s/keycloak.yaml
 
   - name: services-only
     manifests:
       rawYaml:
         - api-gateway/k8s/serviceaccount.yaml
         - api-gateway/k8s/configmap.yaml
-        - api-gateway/k8s/secret.yaml
         - api-gateway/k8s/deployment.yaml
         - api-gateway/k8s/service.yaml
         - order-service/k8s/serviceaccount.yaml
@@ -78,8 +77,8 @@ profiles:
         - order-service/k8s/secret.yaml
         - order-service/k8s/deployment.yaml
         - order-service/k8s/service.yaml
-#        - inventory-service/k8s/serviceaccount.yaml
-#        - inventory-service/k8s/configmap.yaml
-#        - inventory-service/k8s/secret.yaml
-#        - inventory-service/k8s/deployment.yaml
-#        - inventory-service/k8s/service.yaml
+        - inventory-service/k8s/serviceaccount.yaml
+        - inventory-service/k8s/configmap.yaml
+        - inventory-service/k8s/secret.yaml
+        - inventory-service/k8s/deployment.yaml
+        - inventory-service/k8s/service.yaml

@@ -32,8 +32,6 @@ spec:
           envFrom:
             - configMapRef:
                 name: api-gateway
-            - secretRef:
-                name: api-gateway-secret
           resources:
             requests:
               cpu: 100m

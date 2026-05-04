@@ -2,7 +2,7 @@ plugins {
     id 'org.jetbrains.kotlin.jvm' version '2.2.21'
     id 'org.jetbrains.kotlin.plugin.spring' version '2.2.21'
     id 'org.jetbrains.kotlin.plugin.jpa' version '2.2.21'
-    id 'org.springframework.boot' version '4.0.6'
+    id 'org.springframework.boot' version '3.5.0'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -21,39 +21,13 @@ repositories {
 }
 
 dependencies {
-    // Web (MVC/Servlet)
     implementation 'org.springframework.boot:spring-boot-starter-web'
-    // Security — JWT as OAuth2 Resource Server
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
-    // Input validation
-    implementation 'org.springframework.boot:spring-boot-starter-validation'
-    // Persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'org.postgresql:postgresql'
-    implementation 'org.flywaydb:flyway-core'
-    implementation 'org.flywaydb:flyway-database-postgresql'
-    // Caching (Redis)
-    implementation 'org.springframework.boot:spring-boot-starter-cache'
-    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
-    // Messaging (Kafka)
-    implementation 'org.springframework.kafka:spring-kafka'
-    // Actuator
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    // Circuit Breaker (Resilience4j)
-    implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
-    // Distributed tracing (Brave/Zipkin)
-    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
-    implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
-    // JSON structured logging
-    implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
-    // Kotlin
     implementation 'org.jetbrains.kotlin:kotlin-reflect'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
-    // Test
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.springframework.kafka:spring-kafka-test'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
