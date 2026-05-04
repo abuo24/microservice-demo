@@ -24,7 +24,7 @@ spec:
       serviceAccountName: order-service-sa
       containers:
         - name: order-service
-          image: uz.coder/order-service:0.0.1-SNAPSHOT
+          image: order-service
           imagePullPolicy: Never
           ports:
             - name: http

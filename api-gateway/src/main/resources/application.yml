@@ -6,6 +6,8 @@ spring:
     name: api-gateway
 
   cloud:
+    discovery:
+      enabled: false
     gateway:
       routes:
         - id: order-service

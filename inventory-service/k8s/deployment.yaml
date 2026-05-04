@@ -24,7 +24,7 @@ spec:
       serviceAccountName: inventory-service-sa
       containers:
         - name: inventory-service
-          image: uz.coder/inventory-service:0.0.1-SNAPSHOT
+          image: inventory-service
           imagePullPolicy: Never
           ports:
             - name: http

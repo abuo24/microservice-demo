@@ -24,7 +24,7 @@ spec:
       serviceAccountName: api-gateway-sa
       containers:
         - name: api-gateway
-          image: uz.coder/api-gateway:0.0.1-SNAPSHOT
+          image: api-gateway
           imagePullPolicy: Never
           ports:
             - name: http
