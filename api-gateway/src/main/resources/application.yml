@@ -12,23 +12,6 @@ spring:
         all-namespaces: false
       config:
         enabled: false
-    gateway:
-      server:
-        webflux:
-          routes:
-            - id: order-service
-              uri: lb://order-service
-              predicates:
-                - Path=/api/orders/**
-              filters:
-                - AddRequestHeader=X-Source, api-gateway
-
-            - id: inventory-service
-              uri: lb://inventory-service
-              predicates:
-                - Path=/api/inventory/**
-              filters:
-                - AddRequestHeader=X-Source, api-gateway
 
 management:
   endpoints:
