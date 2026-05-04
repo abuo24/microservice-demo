@@ -7,20 +7,25 @@ build:
   local:
     push: false
     concurrency: 3
-    useBuildkit: true
   artifacts:
     - image: api-gateway
       context: api-gateway
-      docker:
-        dockerfile: Dockerfile
+      custom:
+        buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+        dependencies:
+          paths: [src, build.gradle, settings.gradle, gradle, k8s]
     - image: order-service
       context: order-service
-      docker:
-        dockerfile: Dockerfile
+      custom:
+        buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+        dependencies:
+          paths: [src, build.gradle, settings.gradle, gradle, k8s]
     - image: inventory-service
       context: inventory-service
-      docker:
-        dockerfile: Dockerfile
+      custom:
+        buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+        dependencies:
+          paths: [src, build.gradle, settings.gradle, gradle, k8s]
 
 manifests:
   rawYaml:

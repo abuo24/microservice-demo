@@ -5,55 +5,14 @@ spring:
   application:
     name: api-gateway
 
+  autoconfigure:
+    exclude:
+      - org.springframework.cloud.client.discovery.simple.SimpleDiscoveryClientAutoConfiguration
+      - org.springframework.cloud.client.discovery.simple.reactive.SimpleReactiveDiscoveryClientAutoConfiguration
+      - org.springframework.cloud.client.discovery.composite.CompositeDiscoveryClientAutoConfiguration
+      - org.springframework.cloud.client.discovery.composite.reactive.ReactiveCompositeDiscoveryClientAutoConfiguration
+
   cloud:
-    discovery:
-      enabled: false
-    gateway:
-      routes:
-        - id: order-service
-          uri: lb://order-service
-          predicates:
-            - Path=/api/orders/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: order-circuit-breaker
-                fallbackUri: forward:/fallback/orders
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
-                redis-rate-limiter.requestedTokens: 1
-            - AddRequestHeader=X-Source, api-gateway
-            - RemoveRequestHeader=Cookie
-
-        - id: inventory-service
-          uri: lb://inventory-service
-          predicates:
-            - Path=/api/inventory/**
-          filters:
-            - name: CircuitBreaker
-              args:
-                name: inventory-circuit-breaker
-                fallbackUri: forward:/fallback/inventory
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 10
-                redis-rate-limiter.burstCapacity: 20
-                redis-rate-limiter.requestedTokens: 1
-            - AddRequestHeader=X-Source, api-gateway
-            - RemoveRequestHeader=Cookie
-
-      default-filters:
-        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-
-      globalcors:
-        cors-configurations:
-          '[/**]':
-            allowedOrigins: "*"
-            allowedMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
-            allowedHeaders: "*"
-
     kubernetes:
       discovery:
         enabled: true
@@ -64,6 +23,53 @@ spring:
         enabled: true
         mode: polling
         period: 15000
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: order-service
+              uri: lb://order-service
+              predicates:
+                - Path=/api/orders/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: order-circuit-breaker
+                    fallbackUri: forward:/fallback/orders
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+                - AddRequestHeader=X-Source, api-gateway
+                - RemoveRequestHeader=Cookie
+
+            - id: inventory-service
+              uri: lb://inventory-service
+              predicates:
+                - Path=/api/inventory/**
+              filters:
+                - name: CircuitBreaker
+                  args:
+                    name: inventory-circuit-breaker
+                    fallbackUri: forward:/fallback/inventory
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10
+                    redis-rate-limiter.burstCapacity: 20
+                    redis-rate-limiter.requestedTokens: 1
+                - AddRequestHeader=X-Source, api-gateway
+                - RemoveRequestHeader=Cookie
+
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+
+          globalcors:
+            cors-configurations:
+              '[/**]':
+                allowedOrigins: "*"
+                allowedMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
+                allowedHeaders: "*"
 
   security:
     oauth2:
