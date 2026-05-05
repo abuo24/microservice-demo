@@ -10,7 +10,7 @@ import uz.coder.order_service.service.OrderService
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping
 class OrderController(private val orderService: OrderService) {
 
     @GetMapping("/{id}")

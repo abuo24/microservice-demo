@@ -10,7 +10,7 @@ import uz.coder.inventory_service.service.InventoryService
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/inventory")
+@RequestMapping
 class InventoryController(private val inventoryService: InventoryService) {
 
     @GetMapping
