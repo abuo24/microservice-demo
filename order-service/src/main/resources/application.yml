@@ -22,12 +22,47 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,circuitbreakers
+  health:
+    circuitbreakers:
+      enabled: true
   endpoint:
     health:
       show-details: always
       probes:
         enabled: true
+
+inventory:
+  service:
+    url: ${INVENTORY_SERVICE_URL:http://inventory-service:8082}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      inventory:
+        slidingWindowSize: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        registerHealthIndicator: true
+      inventory-broken:
+        slidingWindowSize: 3
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 1
+        registerHealthIndicator: true
+      inventory-annotation:
+        slidingWindowSize: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        registerHealthIndicator: true
+      inventory-annotation-broken:
+        slidingWindowSize: 3
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 1
+        registerHealthIndicator: true
 
 logging:
   level:
