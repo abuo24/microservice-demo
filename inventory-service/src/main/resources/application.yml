@@ -35,6 +35,10 @@ management:
     tracing:
       endpoint: http://zipkin:9411/api/v2/spans
 
+grpc:
+  server:
+    port: 9090
+
 logging:
   level:
     uz.coder: DEBUG

@@ -5,6 +5,7 @@ import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import uz.coder.order_service.client.AnnotationInventoryClient
 import uz.coder.order_service.client.InventoryClient
+import uz.coder.order_service.client.InventoryGrpcClient
 import uz.coder.order_service.dto.OrderRequest
 import uz.coder.order_service.dto.OrderResponse
 import uz.coder.order_service.dto.StockCheckResponse
@@ -17,7 +18,8 @@ import java.util.UUID
 class OrderController(
     private val orderService: OrderService,
     private val inventoryClient: InventoryClient,
-    private val annotationInventoryClient: AnnotationInventoryClient
+    private val annotationInventoryClient: AnnotationInventoryClient,
+    private val inventoryGrpcClient: InventoryGrpcClient
 ) {
 
     @GetMapping("/{id}")
@@ -62,4 +64,9 @@ class OrderController(
     @GetMapping("/stock-annotation-broken/{productId}")
     fun checkStockAnnotationBroken(@PathVariable productId: String): ResponseEntity<StockCheckResponse> =
         ResponseEntity.ok(annotationInventoryClient.checkStockBroken(productId))
+
+    // gRPC: calls inventory-service via gRPC on port 9090 (binary protocol, low latency)
+    @GetMapping("/stock-grpc/{productId}")
+    fun checkStockGrpc(@PathVariable productId: String): ResponseEntity<StockCheckResponse> =
+        ResponseEntity.ok(inventoryGrpcClient.checkStock(productId))
 }
