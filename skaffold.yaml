@@ -31,10 +31,10 @@ manifests:
   rawYaml:
     - k8s/namespace.yaml
     - k8s/postgres.yaml
-#    - k8s/redis.yaml
-#    - k8s/kafka.yaml
-#    - k8s/zipkin.yaml
-#    - k8s/keycloak.yaml
+    #    - k8s/redis.yaml
+    #    - k8s/kafka.yaml
+    - k8s/zipkin.yaml
+    #    - k8s/keycloak.yaml
     - api-gateway/k8s/serviceaccount.yaml
     - api-gateway/k8s/configmap.yaml
     - api-gateway/k8s/secret.yaml
@@ -60,10 +60,10 @@ profiles:
       rawYaml:
         - k8s/namespace.yaml
         - k8s/postgres.yaml
-#        - k8s/redis.yaml
-#        - k8s/kafka.yaml
-#        - k8s/zipkin.yaml
-#        - k8s/keycloak.yaml
+        - k8s/zipkin.yaml
+  #        - k8s/redis.yaml
+  #        - k8s/kafka.yaml
+  #        - k8s/keycloak.yaml
 
   - name: services-only
     manifests:
