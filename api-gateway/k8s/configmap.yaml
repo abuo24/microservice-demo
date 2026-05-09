@@ -7,3 +7,4 @@ metadata:
     app: api-gateway
 data:
   SPRING_PROFILES_ACTIVE: "kubernetes"
+  KEYCLOAK_ISSUER_URI: "http://keycloak:8080/realms/microservices"

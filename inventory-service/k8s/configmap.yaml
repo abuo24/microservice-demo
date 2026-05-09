@@ -11,3 +11,4 @@ data:
   DB_NAME: "inventory"
   DB_USERNAME: "postgres"
   SPRING_PROFILES_ACTIVE: "kubernetes"
+  KEYCLOAK_ISSUER_URI: "http://keycloak:8080/realms/microservices"

@@ -10,6 +10,11 @@ class GatewayConfig {
 
     @Bean
     fun routes(builder: RouteLocatorBuilder): RouteLocator = builder.routes()
+        .route("keycloak") { r ->
+            r.path("/auth/**")
+                .filters { f -> f.rewritePath("/auth/(?<segment>.*)", "/$\\{segment}") }
+                .uri("http://keycloak:8080")
+        }
         .route("order-service") { r ->
             r.path("/api/orders/**")
                 .filters { f -> f.addRequestHeader("X-Source", "api-gateway") }

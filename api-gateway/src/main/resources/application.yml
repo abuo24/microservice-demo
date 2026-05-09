@@ -1,9 +1,16 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
 
 spring:
   application:
     name: api-gateway
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/microservices}
 
   cloud:
     kubernetes:
@@ -29,6 +36,16 @@ management:
   zipkin:
     tracing:
       endpoint: http://zipkin:9411/api/v2/spans
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: api-gateway
+        url: /v3/api-docs
+      - name: order-service
+        url: /api/orders/v3/api-docs
+      - name: inventory-service
+        url: /api/inventory/v3/api-docs
 
 logging:
   level:
