@@ -11,6 +11,9 @@ manifests:
     #    - k8s/kafka.yaml
     - k8s/zipkin.yaml
     - k8s/keycloak.yaml
+    - k8s/loki.yaml
+    - k8s/promtail.yaml
+    - k8s/grafana.yaml
     - api-gateway/k8s/serviceaccount.yaml
     - api-gateway/k8s/configmap.yaml
     - api-gateway/k8s/secret.yaml
@@ -40,6 +43,9 @@ profiles:
         - k8s/keycloak.yaml
   #        - k8s/redis.yaml
   #        - k8s/kafka.yaml
+        - k8s/loki.yaml
+        - k8s/promtail.yaml
+        - k8s/grafana.yaml
 
   - name: services-only
     build:

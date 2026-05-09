@@ -1,5 +1,6 @@
 package uz.coder.order_service.controller
 
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -21,52 +22,70 @@ class OrderController(
     private val annotationInventoryClient: AnnotationInventoryClient,
     private val inventoryGrpcClient: InventoryGrpcClient
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @GetMapping("/{id}")
-    fun getOrder(@PathVariable id: UUID): ResponseEntity<OrderResponse> =
-        ResponseEntity.ok(orderService.findById(id))
+    fun getOrder(@PathVariable id: UUID): ResponseEntity<OrderResponse> {
+        log.debug("GET order id={}", id)
+        return ResponseEntity.ok(orderService.findById(id))
+    }
 
     @GetMapping("/customer/{customerId}")
-    fun getOrdersByCustomer(@PathVariable customerId: String): ResponseEntity<List<OrderResponse>> =
-        ResponseEntity.ok(orderService.findByCustomerId(customerId))
+    fun getOrdersByCustomer(@PathVariable customerId: String): ResponseEntity<List<OrderResponse>> {
+        log.debug("GET orders customerId={}", customerId)
+        return ResponseEntity.ok(orderService.findByCustomerId(customerId))
+    }
 
     @PostMapping
-    fun createOrder(@RequestBody request: OrderRequest): ResponseEntity<OrderResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(orderService.createOrder(request))
+    fun createOrder(@RequestBody request: OrderRequest): ResponseEntity<OrderResponse> {
+        log.info("POST createOrder customerId={} items={}", request.customerId, request.items.size)
+        val response = orderService.createOrder(request)
+        log.info("Order created id={} totalAmount={}", response.id, response.totalAmount)
+        return ResponseEntity.status(HttpStatus.CREATED).body(response)
+    }
 
     @PatchMapping("/{id}/status")
     fun updateStatus(
         @PathVariable id: UUID,
         @RequestParam status: OrderStatus
-    ): ResponseEntity<OrderResponse> =
-        ResponseEntity.ok(orderService.updateStatus(id, status))
+    ): ResponseEntity<OrderResponse> {
+        log.info("PATCH order status id={} status={}", id, status)
+        return ResponseEntity.ok(orderService.updateStatus(id, status))
+    }
 
     @DeleteMapping("/{id}")
-    fun cancelOrder(@PathVariable id: UUID): ResponseEntity<OrderResponse> =
-        ResponseEntity.ok(orderService.cancelOrder(id))
+    fun cancelOrder(@PathVariable id: UUID): ResponseEntity<OrderResponse> {
+        log.info("DELETE (cancel) order id={}", id)
+        return ResponseEntity.ok(orderService.cancelOrder(id))
+    }
 
-    // Circuit breaker CASE 1: calls real inventory-service — succeeds when inventory is UP
     @GetMapping("/stock/{productId}")
-    fun checkStock(@PathVariable productId: String): ResponseEntity<StockCheckResponse> =
-        ResponseEntity.ok(inventoryClient.checkStock(productId))
+    fun checkStock(@PathVariable productId: String): ResponseEntity<StockCheckResponse> {
+        log.debug("GET stock productId={} via HTTP circuit-breaker", productId)
+        return ResponseEntity.ok(inventoryClient.checkStock(productId))
+    }
 
-    // Circuit breaker CASE 2: calls non-existent host — always fails, circuit opens, fallback returns
     @GetMapping("/stock-broken/{productId}")
-    fun checkStockBroken(@PathVariable productId: String): ResponseEntity<StockCheckResponse> =
-        ResponseEntity.ok(inventoryClient.checkStockBroken(productId))
+    fun checkStockBroken(@PathVariable productId: String): ResponseEntity<StockCheckResponse> {
+        log.debug("GET stock-broken productId={} (broken host test)", productId)
+        return ResponseEntity.ok(inventoryClient.checkStockBroken(productId))
+    }
 
-    // Circuit breaker CASE 3: @CircuitBreaker annotation, real inventory — circuit CLOSED, live data
     @GetMapping("/stock-annotation/{productId}")
-    fun checkStockAnnotation(@PathVariable productId: String): ResponseEntity<StockCheckResponse> =
-        ResponseEntity.ok(annotationInventoryClient.checkStock(productId))
+    fun checkStockAnnotation(@PathVariable productId: String): ResponseEntity<StockCheckResponse> {
+        log.debug("GET stock-annotation productId={}", productId)
+        return ResponseEntity.ok(annotationInventoryClient.checkStock(productId))
+    }
 
-    // Circuit breaker CASE 4: @CircuitBreaker annotation, broken host — circuit OPEN, fallback
     @GetMapping("/stock-annotation-broken/{productId}")
-    fun checkStockAnnotationBroken(@PathVariable productId: String): ResponseEntity<StockCheckResponse> =
-        ResponseEntity.ok(annotationInventoryClient.checkStockBroken(productId))
+    fun checkStockAnnotationBroken(@PathVariable productId: String): ResponseEntity<StockCheckResponse> {
+        log.debug("GET stock-annotation-broken productId={} (broken host test)", productId)
+        return ResponseEntity.ok(annotationInventoryClient.checkStockBroken(productId))
+    }
 
-    // gRPC: calls inventory-service via gRPC on port 9090 (binary protocol, low latency)
     @GetMapping("/stock-grpc/{productId}")
-    fun checkStockGrpc(@PathVariable productId: String): ResponseEntity<StockCheckResponse> =
-        ResponseEntity.ok(inventoryGrpcClient.checkStock(productId))
+    fun checkStockGrpc(@PathVariable productId: String): ResponseEntity<StockCheckResponse> {
+        log.debug("GET stock-grpc productId={} via gRPC", productId)
+        return ResponseEntity.ok(inventoryGrpcClient.checkStock(productId))
+    }
 }

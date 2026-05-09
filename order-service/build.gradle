@@ -35,6 +35,7 @@ dependencies {
     implementation 'io.micrometer:micrometer-tracing-bridge-brave'
     implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation 'net.logstash.logback:logstash-logback-encoder:8.0'
     implementation 'net.devh:grpc-spring-boot-starter:3.1.0.RELEASE'
     implementation 'io.grpc:grpc-stub:1.63.0'
     implementation 'io.grpc:grpc-protobuf:1.63.0'
