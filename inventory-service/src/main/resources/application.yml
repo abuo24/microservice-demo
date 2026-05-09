@@ -24,6 +24,7 @@ spring:
     port: ${REDIS_PORT:6379}
     password: ${REDIS_PASSWORD:redisPass}
 
+  # if some tables created before flyway migration, flyway skips them
   flyway:
     baselineOnMigrate: true
 
