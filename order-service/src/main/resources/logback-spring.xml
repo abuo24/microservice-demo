@@ -26,6 +26,10 @@
         <logger name="AUDIT" level="INFO" additivity="false">
             <appender-ref ref="CONSOLE"/>
         </logger>
+        <!-- EXCEPTION_TRACKER: separate from app logs, filterable in Loki -->
+        <logger name="EXCEPTION_TRACKER" level="ERROR" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
