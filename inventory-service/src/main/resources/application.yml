@@ -28,6 +28,10 @@ spring:
   flyway:
     baselineOnMigrate: true
 
+  graphql:
+    graphiql:
+      enabled: true
+
   jpa:
     hibernate:
       ddl-auto: validate
