@@ -7,7 +7,7 @@ manifests:
   rawYaml:
     - k8s/namespace.yaml
     - k8s/postgres.yaml
-    #    - k8s/redis.yaml
+    - k8s/redis.yaml
     #    - k8s/kafka.yaml
     - k8s/zipkin.yaml
     - k8s/keycloak.yaml
@@ -42,7 +42,7 @@ profiles:
         - k8s/postgres.yaml
         - k8s/zipkin.yaml
         - k8s/keycloak.yaml
-  #        - k8s/redis.yaml
+        - k8s/redis.yaml
   #        - k8s/kafka.yaml
         - k8s/loki.yaml
         - k8s/promtail.yaml

@@ -3,6 +3,7 @@ package uz.coder.inventory_service.service
 import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import org.slf4j.LoggerFactory
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uz.coder.inventory_service.audit.Auditable
@@ -35,6 +36,7 @@ class InventoryService(
         .description("Total insufficient stock rejections")
         .register(meterRegistry)
 
+    @Cacheable(cacheNames = ["inventory"], key = "#productId")
     fun findByProductId(productId: String): InventoryResponse {
         log.info("Finding inventory productId={}", productId)
         return inventoryRepository.findByProductId(productId)
@@ -42,14 +44,17 @@ class InventoryService(
             .orElseThrow { InventoryNotFoundException("Inventory not found for productId: $productId") }
     }
 
+    @Cacheable(cacheNames = ["inventory"], key = "#id")
     fun findById(id: UUID): InventoryResponse =
         inventoryRepository.findById(id)
             .map { InventoryResponse.from(it) }
             .orElseThrow { InventoryNotFoundException("Inventory not found: $id") }
 
+    @Cacheable(cacheNames = ["inventory"], key = "'all'")
     fun findAll(): List<InventoryResponse> =
         inventoryRepository.findAll().map { InventoryResponse.from(it) }
 
+    @Cacheable(cacheNames = ["inventory"], key = "'in-stock'")
     fun findAllInStock(): List<InventoryResponse> =
         inventoryRepository.findAllInStock().map { InventoryResponse.from(it) }
 

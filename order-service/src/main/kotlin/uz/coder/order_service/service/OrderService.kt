@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
+import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import uz.coder.order_service.audit.Auditable
@@ -39,6 +40,7 @@ class OrderService(
         .publishPercentiles(0.5, 0.95, 0.99)
         .register(meterRegistry)
 
+    @Cacheable(cacheNames = ["orders"], key = "#id")
     fun findById(id: UUID): OrderResponse {
         log.info("Finding order id={}", id)
         return orderRepository.findById(id)
@@ -46,6 +48,7 @@ class OrderService(
             .orElseThrow { OrderNotFoundException("Order not found: $id") }
     }
 
+    @Cacheable(cacheNames = ["orders"], key = "#customerId")
     fun findByCustomerId(customerId: String): List<OrderResponse> {
         log.info("Finding orders for customerId={}", customerId)
         return orderRepository.findByCustomerId(customerId).map { OrderResponse.from(it) }
