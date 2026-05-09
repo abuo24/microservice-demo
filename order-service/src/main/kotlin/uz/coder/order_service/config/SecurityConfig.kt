@@ -21,8 +21,8 @@ class SecurityConfig {
             .csrf { it.disable() }
             .authorizeHttpRequests { auth ->
                 auth
-                    // K8s probes
-                    .requestMatchers("/actuator/health/**").permitAll()
+                    // K8s probes + Prometheus scraping
+                    .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                     // Swagger
                     .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                     // Read access: USER or ADMIN

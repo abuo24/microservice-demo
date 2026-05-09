@@ -22,8 +22,8 @@ class SecurityConfig {
             .csrf { it.disable() }
             .authorizeExchange { auth ->
                 auth
-                    // K8s probes — must be unauthenticated
-                    .pathMatchers("/actuator/health/**").permitAll()
+                    // K8s probes + Prometheus scraping — must be unauthenticated
+                    .pathMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
                     // Keycloak proxy — token endpoint must be unauthenticated
                     .pathMatchers("/auth/**").permitAll()
                     // Swagger UI for downstream services forwarded through gateway

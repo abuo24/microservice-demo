@@ -22,6 +22,10 @@
                 <customFields>{"app":"${APP_NAME}"}</customFields>
             </encoder>
         </appender>
+        <!-- AUDIT logger: additivity=false prevents double-logging to root -->
+        <logger name="AUDIT" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
         <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>

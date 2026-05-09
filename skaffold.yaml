@@ -14,6 +14,7 @@ manifests:
     - k8s/loki.yaml
     - k8s/promtail.yaml
     - k8s/grafana.yaml
+    - k8s/prometheus.yaml
     - api-gateway/k8s/serviceaccount.yaml
     - api-gateway/k8s/configmap.yaml
     - api-gateway/k8s/secret.yaml
@@ -46,6 +47,7 @@ profiles:
         - k8s/loki.yaml
         - k8s/promtail.yaml
         - k8s/grafana.yaml
+        - k8s/prometheus.yaml
 
   - name: services-only
     build:

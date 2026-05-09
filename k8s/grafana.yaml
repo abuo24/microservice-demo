@@ -18,6 +18,10 @@ data:
               matcherRegex: '"traceId":"(\w+)"'
               url: http://localhost:9411/zipkin/traces/${__value.raw}
               urlDisplayLabel: View in Zipkin
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus:9090
+        access: proxy
       - name: Zipkin
         type: zipkin
         url: http://zipkin:9411
