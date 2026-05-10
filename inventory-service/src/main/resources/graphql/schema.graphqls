@@ -1,0 +1,18 @@
+type InventoryItem {
+    id: ID!
+    productId: String!
+    productName: String!
+    quantity: Int!
+    reservedQuantity: Int!
+    availableQuantity: Int!
+    unitPrice: Float!
+    createdAt: String!
+    updatedAt: String!
+}
+
+type Query {
+    inventoryByProductId(productId: String!): InventoryItem
+    inventoryById(id: ID!): InventoryItem
+    allInventory: [InventoryItem!]!
+    allInStock: [InventoryItem!]!
+}

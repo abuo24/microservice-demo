@@ -28,21 +28,3 @@ data class OrderResponse(
         )
     }
 }
-
-data class OrderItemResponse(
-    val id: UUID,
-    val productId: String,
-    val productName: String,
-    val quantity: Int,
-    val unitPrice: BigDecimal
-) {
-    companion object {
-        fun from(item: OrderItem) = OrderItemResponse(
-            id = item.id,
-            productId = item.productId,
-            productName = item.productName,
-            quantity = item.quantity,
-            unitPrice = item.unitPrice
-        )
-    }
-}

@@ -1,108 +1,87 @@
 server:
   port: 8082
+  servlet:
+    context-path: /api/inventory
 
 spring:
   application:
     name: inventory-service
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/microservices}
 
   datasource:
     url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:inventory}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
     hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      maximum-pool-size: 5
+  redis:
+    host: ${REDIS_HOST:redis}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:redisPass}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: uz.coder.inventory_service.event,uz.coder.order_service.event
+        spring.json.type.mapping: "uz.coder.order_service.event.OrderCreatedEvent:uz.coder.inventory_service.event.OrderCreatedEvent,uz.coder.order_service.event.OrderStatusChangedEvent:uz.coder.inventory_service.event.OrderStatusChangedEvent,uz.coder.order_service.event.OrderCancelledEvent:uz.coder.inventory_service.event.OrderCancelledEvent"
+
+  # if some tables created before flyway migration, flyway skips them
+  flyway:
+    baselineOnMigrate: true
+
+  graphql:
+    graphiql:
+      enabled: true
 
   jpa:
     hibernate:
       ddl-auto: validate
     show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
     open-in-view: false
-
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-
-  cache:
-    type: redis
-  data:
-    redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-
-  kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    consumer:
-      group-id: inventory-service-group
-      auto-offset-reset: earliest
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: "uz.coder.*"
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
-      properties:
-        spring.json.add.type.headers: false
-
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${JWT_ISSUER_URI:http://keycloak:8080/realms/microservices}
-          jwk-set-uri: ${JWT_JWK_SET_URI:http://keycloak:8080/realms/microservices/protocol/openid-connect/certs}
-
-  cloud:
-    kubernetes:
-      discovery:
-        enabled: true
-      config:
-        enabled: true
-
-resilience4j:
-  circuitbreaker:
-    instances:
-      order-service:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 10s
-        permittedNumberOfCallsInHalfOpenState: 3
-        registerHealthIndicator: true
-  timelimiter:
-    instances:
-      order-service:
-        timeoutDuration: 3s
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers
+        include: health,info,prometheus
   endpoint:
     health:
       show-details: always
       probes:
         enabled: true
+  health:
+    redis:
+      enabled: false
   tracing:
     sampling:
       probability: 1.0
   zipkin:
     tracing:
-      endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}
+      endpoint: http://zipkin:9411/api/v2/spans
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+grpc:
+  server:
+    port: 9090
 
 logging:
   level:
     uz.coder: DEBUG
-    org.springframework.security: INFO
-    org.hibernate.SQL: DEBUG

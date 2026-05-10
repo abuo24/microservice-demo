@@ -1,26 +1,28 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-    <springProfile name="!local">
-        <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
-            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-                <includeMdcKeyName>traceId</includeMdcKeyName>
-                <includeMdcKeyName>spanId</includeMdcKeyName>
-                <customFields>{"service":"api-gateway"}</customFields>
-            </encoder>
-        </appender>
-        <root level="INFO">
-            <appender-ref ref="JSON"/>
-        </root>
-        <logger name="uz.coder" level="DEBUG"/>
-    </springProfile>
+    <springProperty name="APP_NAME" source="spring.application.name" defaultValue="app"/>
 
+    <!-- Local: human-readable colored output -->
     <springProfile name="local">
         <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
             <encoder>
-                <pattern>%d{HH:mm:ss.SSS} [%thread] [%X{traceId},%X{spanId}] %-5level %logger{36} - %msg%n</pattern>
+                <pattern>%d{HH:mm:ss.SSS} %highlight(%-5level) [%15.15t] %cyan(%-40.40logger{39}) : %msg%n%throwable</pattern>
             </encoder>
         </appender>
-        <root level="DEBUG">
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
+
+    <!-- K8s / default: structured JSON — traceId/spanId included automatically from Micrometer MDC -->
+    <springProfile name="!local">
+        <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+                <includeContext>false</includeContext>
+                <customFields>{"app":"${APP_NAME}"}</customFields>
+            </encoder>
+        </appender>
+        <root level="INFO">
             <appender-ref ref="CONSOLE"/>
         </root>
     </springProfile>

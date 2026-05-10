@@ -1,0 +1,51 @@
+server:
+  port: 8082
+  servlet:
+    context-path: /api/inventory
+
+spring:
+  application:
+    name: inventory-service
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:inventory}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    hikari:
+      maximum-pool-size: 3
+
+  cache:
+    type: simple
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
+        spring.json.trusted.packages: uz.coder.inventory_service.event,uz.coder.order_service.event
+        spring.json.type.mapping: "uz.coder.order_service.event.OrderCreatedEvent:uz.coder.inventory_service.event.OrderCreatedEvent,uz.coder.order_service.event.OrderStatusChangedEvent:uz.coder.inventory_service.event.OrderStatusChangedEvent"
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+
+  flyway:
+    baselineOnMigrate: true
+
+  graphql:
+    graphiql:
+      enabled: true
+
+logging:
+  level:
+    uz.coder: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} - %msg%n"

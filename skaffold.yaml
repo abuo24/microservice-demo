@@ -3,30 +3,6 @@ kind: Config
 metadata:
   name: microservices-demo
 
-build:
-  local:
-    push: false
-    concurrency: 3
-  artifacts:
-    - image: api-gateway
-      context: api-gateway
-      custom:
-        buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
-        dependencies:
-          paths: [src, build.gradle, settings.gradle, gradle, k8s]
-    - image: order-service
-      context: order-service
-      custom:
-        buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
-        dependencies:
-          paths: [src, build.gradle, settings.gradle, gradle, k8s]
-    - image: inventory-service
-      context: inventory-service
-      custom:
-        buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
-        dependencies:
-          paths: [src, build.gradle, settings.gradle, gradle, k8s]
-
 manifests:
   rawYaml:
     - k8s/namespace.yaml
@@ -35,6 +11,10 @@ manifests:
     - k8s/kafka.yaml
     - k8s/zipkin.yaml
     - k8s/keycloak.yaml
+    - k8s/loki.yaml
+    - k8s/promtail.yaml
+    - k8s/grafana.yaml
+    - k8s/prometheus.yaml
     - api-gateway/k8s/serviceaccount.yaml
     - api-gateway/k8s/configmap.yaml
     - api-gateway/k8s/secret.yaml
@@ -60,12 +40,92 @@ profiles:
       rawYaml:
         - k8s/namespace.yaml
         - k8s/postgres.yaml
-        - k8s/redis.yaml
-        - k8s/kafka.yaml
         - k8s/zipkin.yaml
         - k8s/keycloak.yaml
+        - k8s/redis.yaml
+        - k8s/kafka.yaml
+        - k8s/loki.yaml
+        - k8s/promtail.yaml
+        - k8s/grafana.yaml
+        - k8s/prometheus.yaml
 
   - name: services-only
+    build:
+      local:
+        push: false
+        concurrency: 3
+
+      artifacts:
+        - image: api-gateway
+          context: api-gateway
+          custom:
+            buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+            dependencies:
+              paths: [ src, build.gradle, settings.gradle, gradle, k8s ]
+        - image: order-service
+          context: order-service
+          custom:
+            buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+            dependencies:
+              paths: [ src, build.gradle, settings.gradle, gradle, k8s ]
+        - image: inventory-service
+          context: inventory-service
+          custom:
+            buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+            dependencies:
+              paths: [ src, build.gradle, settings.gradle, gradle, k8s ]
+
+    manifests:
+      rawYaml:
+        - api-gateway/k8s/serviceaccount.yaml
+        - api-gateway/k8s/configmap.yaml
+        - api-gateway/k8s/deployment.yaml
+        - api-gateway/k8s/service.yaml
+        - order-service/k8s/serviceaccount.yaml
+        - order-service/k8s/configmap.yaml
+        - order-service/k8s/secret.yaml
+        - order-service/k8s/deployment.yaml
+        - order-service/k8s/service.yaml
+        - inventory-service/k8s/serviceaccount.yaml
+        - inventory-service/k8s/configmap.yaml
+        - inventory-service/k8s/secret.yaml
+        - inventory-service/k8s/deployment.yaml
+        - inventory-service/k8s/service.yaml
+
+  - name: lightweight-infra-only
+    manifests:
+      rawYaml:
+        - k8s/namespace.yaml
+        - k8s/postgres.yaml
+        - k8s/kafka.yaml
+        - k8s/keycloak.yaml
+
+  - name: lightweight-services-only
+    build:
+      local:
+        push: false
+        concurrency: 3
+
+      artifacts:
+        - image: api-gateway
+          context: api-gateway
+          custom:
+            buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+            dependencies:
+              paths: [ src, build.gradle, settings.gradle, gradle, k8s ]
+        - image: order-service
+          context: order-service
+          custom:
+            buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+            dependencies:
+              paths: [ src, build.gradle, settings.gradle, gradle, k8s ]
+        - image: inventory-service
+          context: inventory-service
+          custom:
+            buildCommand: cd $BUILD_CONTEXT && ./gradlew bootJar -x test && docker build -f Dockerfile.slim -t $IMAGE .
+            dependencies:
+              paths: [ src, build.gradle, settings.gradle, gradle, k8s ]
+
     manifests:
       rawYaml:
         - api-gateway/k8s/serviceaccount.yaml
@@ -78,8 +138,8 @@ profiles:
         - order-service/k8s/secret.yaml
         - order-service/k8s/deployment.yaml
         - order-service/k8s/service.yaml
-#        - inventory-service/k8s/serviceaccount.yaml
-#        - inventory-service/k8s/configmap.yaml
-#        - inventory-service/k8s/secret.yaml
-#        - inventory-service/k8s/deployment.yaml
-#        - inventory-service/k8s/service.yaml
+        - inventory-service/k8s/serviceaccount.yaml
+        - inventory-service/k8s/configmap.yaml
+        - inventory-service/k8s/secret.yaml
+        - inventory-service/k8s/deployment.yaml
+        - inventory-service/k8s/service.yaml

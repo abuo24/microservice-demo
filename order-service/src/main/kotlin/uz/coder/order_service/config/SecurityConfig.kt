@@ -2,43 +2,55 @@ package uz.coder.order_service.config
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.HttpMethod
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity
-import org.springframework.security.config.http.SessionCreationPolicy
+import org.springframework.security.core.authority.SimpleGrantedAuthority
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter
-import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter
 import org.springframework.security.web.SecurityFilterChain
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity(prePostEnabled = true)
+@EnableMethodSecurity
 class SecurityConfig {
 
     @Bean
     fun securityFilterChain(http: HttpSecurity): SecurityFilterChain =
         http
             .csrf { it.disable() }
-            .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers("/actuator/health/**").permitAll()
-                    .requestMatchers("/actuator/info").permitAll()
+                    // K8s probes + Prometheus scraping
+                    .requestMatchers("/actuator/health/**", "/actuator/prometheus").permitAll()
+                    // Swagger
+                    .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
+                    // Read access: USER or ADMIN
+                    .requestMatchers(HttpMethod.GET, "/**").hasAnyRole("USER", "ADMIN")
+                    // Write access: ADMIN only
+                    .requestMatchers(HttpMethod.POST, "/**").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PATCH, "/**").hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.DELETE, "/**").hasRole("ADMIN")
                     .anyRequest().authenticated()
             }
             .oauth2ResourceServer { oauth2 ->
-                oauth2.jwt { jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()) }
+                oauth2.jwt { jwt ->
+                    jwt.jwtAuthenticationConverter(keycloakJwtConverter())
+                }
             }
             .build()
 
     @Bean
-    fun jwtAuthenticationConverter(): JwtAuthenticationConverter {
-        val grantedAuthoritiesConverter = JwtGrantedAuthoritiesConverter().apply {
-            setAuthoritiesClaimName("roles")
-            setAuthorityPrefix("ROLE_")
+    fun keycloakJwtConverter(): JwtAuthenticationConverter {
+        val converter = JwtAuthenticationConverter()
+        converter.setJwtGrantedAuthoritiesConverter { jwt ->
+            @Suppress("UNCHECKED_CAST")
+            val realmRoles = (jwt.getClaimAsMap("realm_access")?.get("roles") as? List<String>)
+                ?.map { SimpleGrantedAuthority("ROLE_$it") }
+                ?: emptyList()
+            realmRoles
         }
-        return JwtAuthenticationConverter().apply {
-            setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter)
-        }
+        converter.setPrincipalClaimName("preferred_username")
+        return converter
     }
 }

@@ -29,6 +29,8 @@ spec:
           ports:
             - name: http
               containerPort: 8081
+            - name: grpc
+              containerPort: 9090
           envFrom:
             - configMapRef:
                 name: order-service
@@ -36,22 +38,29 @@ spec:
                 name: order-service-secret
           resources:
             requests:
-              cpu: 200m
-              memory: 512Mi
+              cpu: 100m
+              memory: 256Mi
             limits:
-              cpu: 1000m
-              memory: 1Gi
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /api/orders/actuator/health
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 13
           readinessProbe:
             httpGet:
-              path: /actuator/health/readiness
+              path: /api/orders/actuator/health/readiness
               port: 8081
-            initialDelaySeconds: 45
-            periodSeconds: 10
+            initialDelaySeconds: 0
+            periodSeconds: 5
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /actuator/health/liveness
+              path: /api/orders/actuator/health/liveness
               port: 8081
-            initialDelaySeconds: 90
-            periodSeconds: 15
+            initialDelaySeconds: 30
+            periodSeconds: 10
             failureThreshold: 3

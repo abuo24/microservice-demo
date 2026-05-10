@@ -1,16 +1,16 @@
 server:
   port: 8080
+  forward-headers-strategy: framework
 
 spring:
   application:
     name: api-gateway
 
-  autoconfigure:
-    exclude:
-      - org.springframework.cloud.client.discovery.simple.SimpleDiscoveryClientAutoConfiguration
-      - org.springframework.cloud.client.discovery.simple.reactive.SimpleReactiveDiscoveryClientAutoConfiguration
-      - org.springframework.cloud.client.discovery.composite.CompositeDiscoveryClientAutoConfiguration
-      - org.springframework.cloud.client.discovery.composite.reactive.ReactiveCompositeDiscoveryClientAutoConfiguration
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://keycloak:8080/realms/microservices}
 
   cloud:
     kubernetes:
@@ -18,99 +18,13 @@ spring:
         enabled: true
         all-namespaces: false
       config:
-        enabled: true
-      reload:
-        enabled: true
-        mode: polling
-        period: 15000
-    gateway:
-      server:
-        webflux:
-          routes:
-            - id: order-service
-              uri: lb://order-service
-              predicates:
-                - Path=/api/orders/**
-              filters:
-                - name: CircuitBreaker
-                  args:
-                    name: order-circuit-breaker
-                    fallbackUri: forward:/fallback/orders
-                - name: RequestRateLimiter
-                  args:
-                    redis-rate-limiter.replenishRate: 10
-                    redis-rate-limiter.burstCapacity: 20
-                    redis-rate-limiter.requestedTokens: 1
-                - AddRequestHeader=X-Source, api-gateway
-                - RemoveRequestHeader=Cookie
-
-            - id: inventory-service
-              uri: lb://inventory-service
-              predicates:
-                - Path=/api/inventory/**
-              filters:
-                - name: CircuitBreaker
-                  args:
-                    name: inventory-circuit-breaker
-                    fallbackUri: forward:/fallback/inventory
-                - name: RequestRateLimiter
-                  args:
-                    redis-rate-limiter.replenishRate: 10
-                    redis-rate-limiter.burstCapacity: 20
-                    redis-rate-limiter.requestedTokens: 1
-                - AddRequestHeader=X-Source, api-gateway
-                - RemoveRequestHeader=Cookie
-
-          default-filters:
-            - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
-
-          globalcors:
-            cors-configurations:
-              '[/**]':
-                allowedOrigins: "*"
-                allowedMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
-                allowedHeaders: "*"
-
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${JWT_ISSUER_URI:http://keycloak:8080/realms/microservices}
-          jwk-set-uri: ${JWT_JWK_SET_URI:http://keycloak:8080/realms/microservices/protocol/openid-connect/certs}
-
-  data:
-    redis:
-      host: ${REDIS_HOST:redis}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-
-resilience4j:
-  circuitbreaker:
-    instances:
-      order-circuit-breaker:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 10s
-        permittedNumberOfCallsInHalfOpenState: 3
-        registerHealthIndicator: true
-      inventory-circuit-breaker:
-        slidingWindowSize: 10
-        failureRateThreshold: 50
-        waitDurationInOpenState: 10s
-        permittedNumberOfCallsInHalfOpenState: 3
-        registerHealthIndicator: true
-  timelimiter:
-    instances:
-      order-circuit-breaker:
-        timeoutDuration: 3s
-      inventory-circuit-breaker:
-        timeoutDuration: 3s
+        enabled: false
 
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,gateway,circuitbreakers
+        include: health,info,gateway,prometheus
   endpoint:
     health:
       show-details: always
@@ -121,13 +35,37 @@ management:
       probability: 1.0
   zipkin:
     tracing:
-      endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}
+      endpoint: http://zipkin:9411/api/v2/spans
   metrics:
     tags:
       application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+
+springdoc:
+  swagger-ui:
+    urls:
+      - name: api-gateway
+        url: /v3/api-docs
+      - name: order-service
+        url: /api/orders/v3/api-docs
+      - name: inventory-service
+        url: /api/inventory/v3/api-docs
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      order-composition:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        registerHealthIndicator: true
 
 logging:
   level:
     uz.coder: DEBUG
     org.springframework.cloud.gateway: INFO
-    org.springframework.security: INFO

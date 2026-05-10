@@ -7,7 +7,6 @@ type: Opaque
 stringData:
   KEYCLOAK_ADMIN: "admin"
   KEYCLOAK_ADMIN_PASSWORD: "adminPass"
-  KC_DB_PASSWORD: "dbPass"
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -15,28 +14,68 @@ metadata:
   name: keycloak-config
   namespace: microservices
 data:
-  KC_DB: "postgres"
-  KC_DB_URL: "jdbc:postgresql://postgres:5432/keycloak"
-  KC_DB_USERNAME: "postgres"
-  KC_HOSTNAME: "keycloak"
-  KC_HOSTNAME_STRICT: "false"
-  KC_HOSTNAME_STRICT_HTTPS: "false"
   KC_HTTP_ENABLED: "true"
   KC_HEALTH_ENABLED: "true"
   KC_METRICS_ENABLED: "true"
-  KC_PROXY: "edge"
 ---
+# Realm JSON auto-imported on startup via --import-realm
 apiVersion: v1
-kind: PersistentVolumeClaim
+kind: ConfigMap
 metadata:
-  name: keycloak-pvc
+  name: keycloak-realm
   namespace: microservices
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 1Gi
+data:
+  microservices-realm.json: |
+    {
+      "realm": "microservices",
+      "enabled": true,
+      "accessTokenLifespan": 300,
+      "ssoSessionMaxLifespan": 36000,
+      "registrationAllowed": false,
+      "clients": [
+        {
+          "clientId": "microservices-client",
+          "enabled": true,
+          "publicClient": true,
+          "directAccessGrantsEnabled": true,
+          "standardFlowEnabled": true,
+          "implicitFlowEnabled": false,
+          "redirectUris": ["*"],
+          "webOrigins": ["*"],
+          "protocol": "openid-connect"
+        }
+      ],
+      "roles": {
+        "realm": [
+          {"name": "USER", "composite": false},
+          {"name": "ADMIN", "composite": false}
+        ]
+      },
+      "users": [
+        {
+          "username": "user1",
+          "enabled": true,
+          "emailVerified": true,
+          "email": "user1@example.com",
+          "firstName": "User",
+          "lastName": "One",
+          "requiredActions": [],
+          "credentials": [{"type": "password", "value": "password123", "temporary": false}],
+          "realmRoles": ["USER"]
+        },
+        {
+          "username": "admin1",
+          "enabled": true,
+          "emailVerified": true,
+          "email": "admin1@example.com",
+          "firstName": "Admin",
+          "lastName": "One",
+          "requiredActions": [],
+          "credentials": [{"type": "password", "value": "admin123", "temporary": false}],
+          "realmRoles": ["USER", "ADMIN"]
+        }
+      ]
+    }
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -58,10 +97,13 @@ spec:
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:25.0
-          args: ["start"]
+          imagePullPolicy: IfNotPresent
+          args: ["start-dev", "--import-realm"]
           ports:
             - name: http
               containerPort: 8080
+            - name: management
+              containerPort: 9000
           envFrom:
             - configMapRef:
                 name: keycloak-config
@@ -71,30 +113,31 @@ spec:
             httpGet:
               path: /health/ready
               port: 9000
-            initialDelaySeconds: 120
+            initialDelaySeconds: 60
             periodSeconds: 10
             failureThreshold: 6
           livenessProbe:
             httpGet:
               path: /health/live
               port: 9000
-            initialDelaySeconds: 120
+            initialDelaySeconds: 90
             periodSeconds: 15
             failureThreshold: 3
           resources:
             requests:
-              cpu: 200m
-              memory: 512Mi
+              cpu: 150m
+              memory: 384Mi
             limits:
-              cpu: 1000m
-              memory: 1Gi
+              cpu: 800m
+              memory: 768Mi
           volumeMounts:
-            - name: keycloak-data
-              mountPath: /opt/keycloak/data
+            - name: realm-config
+              mountPath: /opt/keycloak/data/import
+              readOnly: true
       volumes:
-        - name: keycloak-data
-          persistentVolumeClaim:
-            claimName: keycloak-pvc
+        - name: realm-config
+          configMap:
+            name: keycloak-realm
 ---
 apiVersion: v1
 kind: Service
@@ -111,31 +154,3 @@ spec:
     - name: http
       port: 8080
       targetPort: 8080
----
-# Expose admin UI externally via Ingress (optional, can be removed for internal-only setups)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: keycloak
-  namespace: microservices
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-buffer-size: "128k"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - auth.microservices.example.com
-      secretName: keycloak-tls
-  rules:
-    - host: auth.microservices.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: keycloak
-                port:
-                  number: 8080

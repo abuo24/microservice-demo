@@ -1,9 +1,8 @@
 package uz.coder.inventory_service.controller
 
-import jakarta.validation.Valid
+import org.slf4j.LoggerFactory
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
-import org.springframework.security.access.prepost.PreAuthorize
 import org.springframework.web.bind.annotation.*
 import uz.coder.inventory_service.dto.InventoryRequest
 import uz.coder.inventory_service.dto.InventoryResponse
@@ -12,41 +11,49 @@ import uz.coder.inventory_service.service.InventoryService
 import java.util.UUID
 
 @RestController
-@RequestMapping("/api/inventory")
+@RequestMapping
 class InventoryController(private val inventoryService: InventoryService) {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     @GetMapping
-    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
-    fun getAll(): ResponseEntity<List<InventoryResponse>> =
-        ResponseEntity.ok(inventoryService.findAll())
+    fun getAll(): ResponseEntity<List<InventoryResponse>> {
+        log.debug("GET all inventory items")
+        return ResponseEntity.ok(inventoryService.findAll())
+    }
 
     @GetMapping("/in-stock")
-    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
-    fun getAllInStock(): ResponseEntity<List<InventoryResponse>> =
-        ResponseEntity.ok(inventoryService.findAllInStock())
+    fun getAllInStock(): ResponseEntity<List<InventoryResponse>> {
+        log.debug("GET all in-stock inventory items")
+        return ResponseEntity.ok(inventoryService.findAllInStock())
+    }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
-    fun getById(@PathVariable id: UUID): ResponseEntity<InventoryResponse> =
-        ResponseEntity.ok(inventoryService.findById(id))
+    fun getById(@PathVariable id: UUID): ResponseEntity<InventoryResponse> {
+        log.debug("GET inventory id={}", id)
+        return ResponseEntity.ok(inventoryService.findById(id))
+    }
 
     @GetMapping("/product/{productId}")
-    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
-    fun getByProductId(@PathVariable productId: String): ResponseEntity<InventoryResponse> =
-        ResponseEntity.ok(inventoryService.findByProductId(productId))
+    fun getByProductId(@PathVariable productId: String): ResponseEntity<InventoryResponse> {
+        log.debug("GET inventory productId={}", productId)
+        return ResponseEntity.ok(inventoryService.findByProductId(productId))
+    }
 
     @PostMapping
-    @PreAuthorize("hasRole('ADMIN')")
-    fun createOrUpdate(@Valid @RequestBody request: InventoryRequest): ResponseEntity<InventoryResponse> =
-        ResponseEntity.status(HttpStatus.CREATED).body(inventoryService.createOrUpdate(request))
+    fun createOrUpdate(@RequestBody request: InventoryRequest): ResponseEntity<InventoryResponse> {
+        log.info("POST createOrUpdate inventory productId={} quantity={}", request.productId, request.quantity)
+        return ResponseEntity.status(HttpStatus.CREATED).body(inventoryService.createOrUpdate(request))
+    }
 
     @PostMapping("/reserve")
-    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
-    fun reserve(@Valid @RequestBody request: ReserveRequest): ResponseEntity<InventoryResponse> =
-        ResponseEntity.ok(inventoryService.reserveStock(request.productId, request.quantity))
+    fun reserve(@RequestBody request: ReserveRequest): ResponseEntity<InventoryResponse> {
+        log.info("POST reserve productId={} quantity={}", request.productId, request.quantity)
+        return ResponseEntity.ok(inventoryService.reserveStock(request.productId, request.quantity))
+    }
 
     @PostMapping("/release")
-    @PreAuthorize("hasRole('USER') or hasRole('ADMIN')")
-    fun release(@Valid @RequestBody request: ReserveRequest): ResponseEntity<InventoryResponse> =
-        ResponseEntity.ok(inventoryService.releaseReservation(request.productId, request.quantity))
+    fun release(@RequestBody request: ReserveRequest): ResponseEntity<InventoryResponse> {
+        log.info("POST release productId={} quantity={}", request.productId, request.quantity)
+        return ResponseEntity.ok(inventoryService.releaseReservation(request.productId, request.quantity))
+    }
 }

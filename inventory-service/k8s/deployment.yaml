@@ -29,6 +29,8 @@ spec:
           ports:
             - name: http
               containerPort: 8082
+            - name: grpc
+              containerPort: 9090
           envFrom:
             - configMapRef:
                 name: inventory-service
@@ -36,22 +38,29 @@ spec:
                 name: inventory-service-secret
           resources:
             requests:
-              cpu: 200m
-              memory: 512Mi
+              cpu: 100m
+              memory: 256Mi
             limits:
-              cpu: 1000m
-              memory: 1Gi
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /api/inventory/actuator/health
+              port: 8082
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 13
           readinessProbe:
             httpGet:
-              path: /actuator/health/readiness
+              path: /api/inventory/actuator/health/readiness
               port: 8082
-            initialDelaySeconds: 45
-            periodSeconds: 10
+            initialDelaySeconds: 0
+            periodSeconds: 5
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /actuator/health/liveness
+              path: /api/inventory/actuator/health/liveness
               port: 8082
-            initialDelaySeconds: 90
-            periodSeconds: 15
+            initialDelaySeconds: 30
+            periodSeconds: 10
             failureThreshold: 3

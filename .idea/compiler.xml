@@ -9,6 +9,7 @@
       <module name="inventory-service.main" options="-parameters" />
       <module name="inventory-service.test" options="-parameters" />
       <module name="order-service" options="-parameters" />
+      <module name="order-service.contractTest" options="-parameters" />
       <module name="order-service.main" options="-parameters" />
       <module name="order-service.test" options="-parameters" />
     </option>
