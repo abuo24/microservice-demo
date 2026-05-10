@@ -4,6 +4,7 @@ import io.micrometer.core.instrument.Counter
 import io.micrometer.core.instrument.MeterRegistry
 import io.micrometer.core.instrument.Timer
 import org.slf4j.LoggerFactory
+import org.springframework.cache.annotation.CacheEvict
 import org.springframework.cache.annotation.Cacheable
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -13,8 +14,11 @@ import uz.coder.order_service.domain.OrderItem
 import uz.coder.order_service.dto.OrderRequest
 import uz.coder.order_service.dto.OrderResponse
 import uz.coder.order_service.enumuration.OrderStatus
+import uz.coder.order_service.event.OrderCancelledEvent
+import uz.coder.order_service.event.OrderCreatedEvent
+import uz.coder.order_service.event.OrderEventStore
+import uz.coder.order_service.event.OrderStatusChangedEvent
 import uz.coder.order_service.exception.OrderNotFoundException
-import uz.coder.order_service.event.OrderEventPublisher
 import uz.coder.order_service.repository.OrderRepository
 import java.math.BigDecimal
 import java.time.Instant
@@ -25,7 +29,7 @@ import java.util.UUID
 class OrderService(
     private val orderRepository: OrderRepository,
     private val meterRegistry: MeterRegistry,
-    private val eventPublisher: OrderEventPublisher
+    private val eventStore: OrderEventStore
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -76,8 +80,8 @@ class OrderService(
             val saved = orderRepository.save(order)
             ordersCreated.increment()
             log.info("Order created id={}", saved.id)
-            eventPublisher.publishOrderCreated(
-                uz.coder.order_service.event.OrderCreatedEvent(
+            eventStore.append(
+                OrderCreatedEvent(
                     orderId = saved.id!!,
                     customerId = saved.customerId,
                     totalAmount = saved.totalAmount
@@ -89,6 +93,7 @@ class OrderService(
 
     @Auditable(action = "UPDATE_ORDER_STATUS", resourceType = "ORDER")
     @Transactional
+    @CacheEvict(cacheNames = ["orders"], key = "#id")
     fun updateStatus(id: UUID, status: OrderStatus): OrderResponse {
         val order = orderRepository.findById(id)
             .orElseThrow { OrderNotFoundException("Order not found: $id") }
@@ -96,8 +101,8 @@ class OrderService(
         order.status = status
         order.updatedAt = Instant.now()
         val saved = orderRepository.save(order)
-        eventPublisher.publishOrderStatusChanged(
-            uz.coder.order_service.event.OrderStatusChangedEvent(
+        eventStore.append(
+            OrderStatusChangedEvent(
                 orderId = saved.id!!,
                 newStatus = status.name,
                 previousStatus = previousStatus
@@ -108,18 +113,21 @@ class OrderService(
 
     @Auditable(action = "CANCEL_ORDER", resourceType = "ORDER")
     @Transactional
+    @CacheEvict(cacheNames = ["orders"], key = "#id")
     fun cancelOrder(id: UUID): OrderResponse {
         ordersCancelled.increment()
         val order = orderRepository.findById(id)
             .orElseThrow { OrderNotFoundException("Order not found: $id") }
+        if (order.status == OrderStatus.CANCELLED) {
+            throw IllegalStateException("Order $id is already cancelled")
+        }
         val previousStatus = order.status.name
         order.status = OrderStatus.CANCELLED
         order.updatedAt = Instant.now()
         val saved = orderRepository.save(order)
-        eventPublisher.publishOrderStatusChanged(
-            uz.coder.order_service.event.OrderStatusChangedEvent(
+        eventStore.append(
+            OrderCancelledEvent(
                 orderId = saved.id!!,
-                newStatus = OrderStatus.CANCELLED.name,
                 previousStatus = previousStatus
             )
         )
