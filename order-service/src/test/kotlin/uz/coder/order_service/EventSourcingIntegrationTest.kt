@@ -3,7 +3,13 @@ package uz.coder.order_service
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.kafka.test.context.EmbeddedKafka
+import org.springframework.test.context.DynamicPropertyRegistry
+import org.springframework.test.context.DynamicPropertySource
+import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.junit.jupiter.Container
+import org.testcontainers.junit.jupiter.Testcontainers
 import uz.coder.order_service.dto.OrderItemRequest
 import uz.coder.order_service.dto.OrderRequest
 import uz.coder.order_service.enumuration.OrderStatus
@@ -14,6 +20,7 @@ import java.math.BigDecimal
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
+@Testcontainers
 @SpringBootTest
 @EmbeddedKafka(partitions = 1, brokerProperties = ["log.segment.bytes=1048576"])
 class EventSourcingIntegrationTest {
@@ -103,5 +110,21 @@ class EventSourcingIntegrationTest {
         val projection = projectionRepository.findByAggregateId(created.id!!)
         assertNotNull(projection)
         assertEquals(OrderStatus.CANCELLED, projection.status)
+    }
+
+    companion object {
+        @Container
+        @ServiceConnection
+        val postgres: PostgreSQLContainer<*> = PostgreSQLContainer("postgres:16-alpine")
+                .withExposedPorts(5432)
+                .withDatabaseName("orders")
+
+        @JvmStatic
+        @DynamicPropertySource
+        fun configureProperties(registry: DynamicPropertyRegistry) {
+            registry.add("spring.datasource.url", postgres::getJdbcUrl)
+            registry.add("spring.datasource.username", postgres::getUsername)
+            registry.add("spring.datasource.password", postgres::getPassword)
+        }
     }
 }
