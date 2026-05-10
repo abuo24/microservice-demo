@@ -24,3 +24,11 @@ data class OrderStatusChangedEvent(
     val newStatus: String,
     val previousStatus: String
 ) : OrderEvent()
+
+data class OrderCancelledEvent(
+    override val eventId: String = UUID.randomUUID().toString(),
+    override val timestamp: Instant = Instant.now(),
+    val orderId: UUID,
+    val previousStatus: String,
+    val reason: String? = null
+) : OrderEvent()

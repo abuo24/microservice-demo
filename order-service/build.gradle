@@ -50,6 +50,7 @@ dependencies {
     compileOnly 'org.apache.tomcat:annotations-api:6.0.53'
     implementation 'org.springframework.cloud:spring-cloud-starter-circuitbreaker-resilience4j'
     implementation 'io.github.resilience4j:resilience4j-spring-boot3'
+    implementation 'io.hypersistence:hypersistence-utils-hibernate-60:3.9.0'
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.jetbrains.kotlin:kotlin-test-junit5'

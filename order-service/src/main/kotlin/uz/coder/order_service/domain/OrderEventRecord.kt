@@ -1,6 +1,8 @@
 package uz.coder.order_service.domain
 
 import jakarta.persistence.*
+import io.hypersistence.utils.hibernate.type.json.JsonType
+import org.hibernate.annotations.Type
 import uz.coder.order_service.event.OrderEventType
 import java.time.Instant
 import java.util.UUID
@@ -19,6 +21,7 @@ class OrderEventRecord(
     @Column(name = "event_type", nullable = false, length = 50)
     val eventType: OrderEventType,
 
+    @Type(JsonType::class)
     @Column(name = "payload", nullable = false, columnDefinition = "jsonb")
     val payload: String,
 

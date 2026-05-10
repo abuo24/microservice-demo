@@ -36,7 +36,7 @@ spring:
       properties:
         spring.deserializer.value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring.json.trusted.packages: uz.coder.inventory_service.event,uz.coder.order_service.event
-        spring.json.type.mapping: "uz.coder.order_service.event.OrderCreatedEvent:uz.coder.inventory_service.event.OrderCreatedEvent,uz.coder.order_service.event.OrderStatusChangedEvent:uz.coder.inventory_service.event.OrderStatusChangedEvent"
+        spring.json.type.mapping: "uz.coder.order_service.event.OrderCreatedEvent:uz.coder.inventory_service.event.OrderCreatedEvent,uz.coder.order_service.event.OrderStatusChangedEvent:uz.coder.inventory_service.event.OrderStatusChangedEvent,uz.coder.order_service.event.OrderCancelledEvent:uz.coder.inventory_service.event.OrderCancelledEvent"
 
   # if some tables created before flyway migration, flyway skips them
   flyway:

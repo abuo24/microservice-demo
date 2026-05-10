@@ -19,4 +19,10 @@ class OrderEventListener {
         log.info("Order status changed event received: orderId={}, newStatus={}, previousStatus={}",
             event.orderId, event.newStatus, event.previousStatus)
     }
+
+    @KafkaListener(topics = ["order-status-changed"], groupId = "inventory-service")
+    fun onOrderCancelled(event: OrderCancelledEvent) {
+        log.info("Order cancelled event received: orderId={}, previousStatus={}",
+            event.orderId, event.previousStatus)
+    }
 }
