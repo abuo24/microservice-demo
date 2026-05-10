@@ -12,6 +12,7 @@ import uz.coder.inventory_service.dto.InventoryRequest
 import uz.coder.inventory_service.dto.InventoryResponse
 import uz.coder.inventory_service.exception.InsufficientStockException
 import uz.coder.inventory_service.exception.InventoryNotFoundException
+import uz.coder.inventory_service.event.InventoryEventPublisher
 import uz.coder.inventory_service.repository.InventoryRepository
 import java.time.Instant
 import java.util.UUID
@@ -20,7 +21,8 @@ import java.util.UUID
 @Transactional(readOnly = true)
 class InventoryService(
     private val inventoryRepository: InventoryRepository,
-    private val meterRegistry: MeterRegistry
+    private val meterRegistry: MeterRegistry,
+    private val eventPublisher: InventoryEventPublisher
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -78,7 +80,15 @@ class InventoryService(
                     unitPrice = request.unitPrice
                 )
             }
-        return InventoryResponse.from(inventoryRepository.save(item))
+        val saved = inventoryRepository.save(item)
+        eventPublisher.publishInventoryUpdated(
+            uz.coder.inventory_service.event.InventoryUpdatedEvent(
+                productId = saved.productId,
+                quantity = saved.quantity,
+                reservedQuantity = saved.reservedQuantity
+            )
+        )
+        return InventoryResponse.from(saved)
     }
 
     @Auditable(action = "RESERVE_STOCK", resourceType = "INVENTORY")
@@ -96,7 +106,15 @@ class InventoryService(
         item.reservedQuantity += quantity
         item.updatedAt = Instant.now()
         reservationsTotal.increment()
-        return InventoryResponse.from(inventoryRepository.save(item))
+        val saved = inventoryRepository.save(item)
+        eventPublisher.publishStockReserved(
+            uz.coder.inventory_service.event.StockReservedEvent(
+                productId = saved.productId,
+                quantity = quantity,
+                availableQuantity = saved.availableQuantity
+            )
+        )
+        return InventoryResponse.from(saved)
     }
 
     @Auditable(action = "RELEASE_STOCK", resourceType = "INVENTORY")
@@ -108,7 +126,15 @@ class InventoryService(
         item.reservedQuantity = maxOf(0, item.reservedQuantity - quantity)
         item.updatedAt = Instant.now()
         releasesTotal.increment()
-        return InventoryResponse.from(inventoryRepository.save(item))
+        val saved = inventoryRepository.save(item)
+        eventPublisher.publishStockReleased(
+            uz.coder.inventory_service.event.StockReleasedEvent(
+                productId = saved.productId,
+                quantity = quantity,
+                availableQuantity = saved.availableQuantity
+            )
+        )
+        return InventoryResponse.from(saved)
     }
 
     @Auditable(action = "DEDUCT_STOCK", resourceType = "INVENTORY")

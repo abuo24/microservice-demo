@@ -14,6 +14,7 @@ import uz.coder.order_service.dto.OrderRequest
 import uz.coder.order_service.dto.OrderResponse
 import uz.coder.order_service.enumuration.OrderStatus
 import uz.coder.order_service.exception.OrderNotFoundException
+import uz.coder.order_service.event.OrderEventPublisher
 import uz.coder.order_service.repository.OrderRepository
 import java.math.BigDecimal
 import java.time.Instant
@@ -23,7 +24,8 @@ import java.util.UUID
 @Transactional(readOnly = true)
 class OrderService(
     private val orderRepository: OrderRepository,
-    private val meterRegistry: MeterRegistry
+    private val meterRegistry: MeterRegistry,
+    private val eventPublisher: OrderEventPublisher
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -74,6 +76,13 @@ class OrderService(
             val saved = orderRepository.save(order)
             ordersCreated.increment()
             log.info("Order created id={}", saved.id)
+            eventPublisher.publishOrderCreated(
+                uz.coder.order_service.event.OrderCreatedEvent(
+                    orderId = saved.id!!,
+                    customerId = saved.customerId,
+                    totalAmount = saved.totalAmount
+                )
+            )
             OrderResponse.from(saved)
         }!!
     }
@@ -83,9 +92,18 @@ class OrderService(
     fun updateStatus(id: UUID, status: OrderStatus): OrderResponse {
         val order = orderRepository.findById(id)
             .orElseThrow { OrderNotFoundException("Order not found: $id") }
+        val previousStatus = order.status.name
         order.status = status
         order.updatedAt = Instant.now()
-        return OrderResponse.from(orderRepository.save(order))
+        val saved = orderRepository.save(order)
+        eventPublisher.publishOrderStatusChanged(
+            uz.coder.order_service.event.OrderStatusChangedEvent(
+                orderId = saved.id!!,
+                newStatus = status.name,
+                previousStatus = previousStatus
+            )
+        )
+        return OrderResponse.from(saved)
     }
 
     @Auditable(action = "CANCEL_ORDER", resourceType = "ORDER")
@@ -94,8 +112,17 @@ class OrderService(
         ordersCancelled.increment()
         val order = orderRepository.findById(id)
             .orElseThrow { OrderNotFoundException("Order not found: $id") }
+        val previousStatus = order.status.name
         order.status = OrderStatus.CANCELLED
         order.updatedAt = Instant.now()
-        return OrderResponse.from(orderRepository.save(order))
+        val saved = orderRepository.save(order)
+        eventPublisher.publishOrderStatusChanged(
+            uz.coder.order_service.event.OrderStatusChangedEvent(
+                orderId = saved.id!!,
+                newStatus = OrderStatus.CANCELLED.name,
+                previousStatus = previousStatus
+            )
+        )
+        return OrderResponse.from(saved)
     }
 }

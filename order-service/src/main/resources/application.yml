@@ -24,6 +24,18 @@ spring:
     port: ${REDIS_PORT:6379}
     password: ${REDIS_PASSWORD:redisPass}
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+    producer:
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9092}
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      properties:
+        spring.json.trusted.packages: uz.coder.order_service.event,uz.coder.inventory_service.event
+
   # if some tables created before flyway migration, flyway skips them
   flyway:
     baselineOnMigrate: true
