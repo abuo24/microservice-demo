@@ -53,6 +53,18 @@ springdoc:
       - name: inventory-service
         url: /api/inventory/v3/api-docs
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      order-composition:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
+        slowCallRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        registerHealthIndicator: true
+
 logging:
   level:
     uz.coder: DEBUG

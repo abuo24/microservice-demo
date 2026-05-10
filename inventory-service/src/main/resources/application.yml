@@ -62,6 +62,9 @@ management:
       show-details: always
       probes:
         enabled: true
+  health:
+    redis:
+      enabled: false
   tracing:
     sampling:
       probability: 1.0

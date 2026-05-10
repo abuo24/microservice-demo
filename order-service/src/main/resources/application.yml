@@ -58,6 +58,8 @@ management:
   health:
     circuitbreakers:
       enabled: true
+    redis:
+      enabled: false
   tracing:
     sampling:
       probability: 1.0
