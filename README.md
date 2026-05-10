@@ -1,377 +1,336 @@
 # Microservices Demo
 
-A production-grade microservices architecture built with **Kotlin + Spring Boot 4 + Kubernetes**.
+Production-grade microservices architecture built with **Kotlin + Spring Boot 3.5 + Kubernetes**. Demonstrates Event Sourcing, CQRS, Outbox Pattern, Consumer-Driven Contract Testing, and full observability stack.
 
-## Architecture Overview
+---
+
+## Table of Contents
+
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Patterns Implemented](#patterns-implemented)
+- [Services](#services)
+- [Quick Start](#quick-start)
+- [API Usage](#api-usage)
+- [Testing Strategy](#testing-strategy)
+- [Observability](#observability)
+- [Project Structure](#project-structure)
+- [Configuration Reference](#configuration-reference)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Architecture
 
 ```
-                        ┌─────────────────────────────────────┐
-                        │           Kubernetes Cluster         │
-                        │                                      │
-Internet ──► Ingress ──►│  api-gateway :8080                   │
-                        │      │                               │
-                        │      ├──► order-service :8081        │
-                        │      │         │                     │
-                        │      └──► inventory-service :8082    │
-                        │                │                     │
-                        │         ┌──────┼──────────┐          │
-                        │       Kafka  Redis  PostgreSQL       │
-                        │                                      │
-                        │    Keycloak  Zipkin                  │
-                        └─────────────────────────────────────┘
+                        ┌────────────────────────────────────────────┐
+                        │           Kubernetes Cluster               │
+                        │                                            │
+Internet ──► Ingress ──►│  api-gateway :8080                         │
+                        │      │                                     │
+                        │      ├──► order-service :8081              │
+                        │      │         │  ┌──────────────────┐     │
+                        │      │         ├──┤ orders DB        │     │
+                        │      │         │  │ order_events     │     │
+                        │      │         │  │ order_projections│     │
+                        │      │         │  └──────────────────┘     │
+                        │      │         │                           │
+                        │      │         │  ┌──────────────────┐     │
+                        │      │         └──┤ Kafka Topics     │     │
+                        │      │            │ - order-created  │     │
+                        │      │            │ - order-status-  │     │
+                        │      │            │   changed        │     │
+                        │      │            └──────────────────┘     │
+                        │      │                  │                  │
+                        │      │                  ▼                  │
+                        │      └──► inventory-service :8082          │
+                        │                                            │
+                        │  Infra: Postgres • Redis • Kafka           │
+                        │  Auth:  Keycloak (JWT/OAuth2)              │
+                        │  Observability: Zipkin • Prometheus •      │
+                        │                 Grafana • Loki             │
+                        └────────────────────────────────────────────┘
 ```
 
-| Service | Port | Responsibility |
-|---|---|---|
-| `api-gateway` | 8080 | JWT validation, routing, rate limiting, circuit breaker |
-| `order-service` | 8081 | Create/manage orders, publish Kafka events |
-| `inventory-service` | 8082 | Stock management, consume Kafka order events |
-| `keycloak` | 8080 (K8s) | OAuth2/JWT issuer |
-| `zipkin` | 9411 | Distributed tracing UI |
+---
 
 ## Tech Stack
 
-- **Language:** Kotlin 2.2
-- **Framework:** Spring Boot 4.0 (WebMVC for services, WebFlux for gateway)
-- **Build:** Gradle (Groovy DSL)
-- **Security:** Spring Security + OAuth2 JWT (Keycloak)
-- **Database:** PostgreSQL + JPA/Hibernate + Flyway migrations
-- **Cache:** Redis
-- **Messaging:** Apache Kafka
-- **Circuit Breaker:** Resilience4j
-- **Tracing:** Micrometer + Zipkin (Brave)
-- **Logging:** Logstash JSON (structured)
-- **Kubernetes:** Spring Cloud Kubernetes Fabric8, RBAC, HPA, Ingress
+| Layer | Technology |
+|-------|------------|
+| **Language** | Kotlin 2.2 |
+| **Framework** | Spring Boot 3.5 (WebMVC for services, WebFlux for gateway) |
+| **Build** | Gradle (Groovy DSL), Skaffold for K8s |
+| **Security** | Spring Security + OAuth2 JWT (Keycloak) |
+| **Database** | PostgreSQL 15 + JPA/Hibernate 6 + Flyway migrations |
+| **Cache** | Redis (Spring Cache) |
+| **Messaging** | Apache Kafka |
+| **API Style** | REST + GraphQL + gRPC |
+| **Resilience** | Resilience4j (Circuit Breaker, Retry, Bulkhead) |
+| **Tracing** | Micrometer + Zipkin (Brave) |
+| **Metrics** | Prometheus + Grafana |
+| **Logs** | Logstash JSON encoder + Loki + Promtail |
+| **Testing** | JUnit 5, Spring Cloud Contract, Testcontainers, EmbeddedKafka |
+| **Container** | Kubernetes (Skaffold), minikube/k3s |
 
 ---
 
-## Prerequisites
+## Patterns Implemented
+
+### 1. Event Sourcing (order-service)
+
+Events are the source of truth. Every state change is stored as an immutable event in `order_events` table.
+
+**Files:**
+- `domain/OrderEventRecord.kt` — JPA entity with JSONB payload
+- `event/OrderEventStore.kt` — append events, replay aggregates
+- `event/OrderEvent.kt` — sealed class with `OrderCreatedEvent`, `OrderStatusChangedEvent`, `OrderCancelledEvent`
+- `db/migration/V2__Add_order_events.sql` — schema with sequence_number for ordering
+
+**Flow:**
+```
+createOrder() ──► save Order ──► eventStore.append(OrderCreatedEvent)
+                                       │
+                                       ▼
+                                  order_events table (JSONB)
+```
+
+### 2. Outbox Pattern (order-service)
+
+Eliminates dual-write race condition between DB and Kafka. Events written transactionally to DB, async publisher relays to Kafka.
+
+**Files:**
+- `event/OutboxPublisher.kt` — `@Scheduled` job (1s interval)
+- `config/SchedulingConfig.kt` — enables scheduling
+
+**Flow:**
+```
+1. Transaction: save Order + insert event_record(published=false)
+2. @Scheduled job: SELECT WHERE published=false (PESSIMISTIC_WRITE lock)
+3. Send to Kafka, await ACK with .get()
+4. Mark published=true, set published_at
+5. On failure: leave published=false, retry next cycle
+```
+
+**Guarantees:** at-least-once delivery, no duplicates if consumer is idempotent.
+
+### 3. CQRS — Command Query Responsibility Segregation (order-service)
+
+Write side stores events; read side maintains denormalized projection for fast queries.
+
+**Files:**
+- `domain/OrderProjection.kt` — read model entity
+- `repository/OrderProjectionRepository.kt` — query API
+- `event/OrderProjectionHandler.kt` — applies events to projection
+- `event/OrderProjectionSubscriber.kt` — `@Scheduled` poller (500ms)
+- `db/migration/V3__Add_order_projections.sql` — denormalized read table
+
+**Architecture:**
+```
+Write Side                    Read Side
+──────────                    ─────────
+OrderService                  OrderProjectionRepository
+   │                                │
+   ▼                                ▼
+order_events ──► Subscriber ──► order_projections
+(events)         (event           (snapshots)
+                  handler)
+```
+
+### 4. Consumer-Driven Contract Testing (order-service ↔ inventory-service)
+
+Real CDC: producer publishes stub jar to Maven, consumer pulls it and verifies its assumptions against producer's actual contracts.
+
+**Producer side (order-service):**
+- `src/test/resources/contracts/order/*.groovy` — Spring Cloud Contract DSL
+- `ContractVerifierBase.kt` — base class with trigger methods
+- `build.gradle` — `verifierStubsJar` task + `publishToMavenLocal`
+
+**Consumer side (inventory-service):**
+- `RealCdcStubRunnerTest.kt` — uses `@AutoConfigureStubRunner` to pull producer stubs
+- Reads producer's groovy contracts from stub jar
+- Verifies fields exist before sending to Kafka
+- If producer changes contract → consumer test fails
+
+**Workflow:**
+```
+Producer                      Maven Local                Consumer
+────────                      ───────────                ────────
+1. Write contract.groovy
+2. ./gradlew verifierStubsJar
+3. publishToMavenLocal ───────► stubs.jar
+                                    │
+                                    ▼
+                              4. @AutoConfigureStubRunner
+                                 pulls latest
+                                    │
+                                    ▼
+                              5. Reads contract from stubs.jar
+                              6. Verifies expected fields
+                              7. Sends event to Kafka
+                              8. Listener receives → assert
+```
+
+### 5. API Composition Pattern (api-gateway)
+
+Composes data from multiple downstream services in a single request. See [API_COMPOSITION_PATTERN.md](API_COMPOSITION_PATTERN.md).
+
+### 6. Circuit Breaker (api-gateway, order-service)
+
+Resilience4j prevents cascading failures. Configured in `application.yml` per downstream:
+
+```yaml
+resilience4j:
+  circuitbreaker:
+    instances:
+      inventory:
+        slidingWindowSize: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+```
+
+### 7. Distributed Tracing
+
+Brave + Micrometer auto-instruments REST, Kafka, JDBC. Every request has `traceId` propagated through services. Visible in Zipkin UI.
+
+---
+
+## Services
+
+| Service | Port | Responsibility |
+|---------|------|----------------|
+| `api-gateway` | 8080 | JWT validation, routing, rate limiting, circuit breaker, API composition |
+| `order-service` | 8081 (HTTP) / 9090 (gRPC) | Create/manage orders, event sourcing, CQRS, Kafka publisher |
+| `inventory-service` | 8082 (HTTP) / 9090 (gRPC) | Stock management, Kafka consumer, gRPC server |
+| `keycloak` | 8080 | OAuth2/JWT issuer |
+| `zipkin` | 9411 | Distributed tracing UI |
+| `prometheus` | 9090 | Metrics collection |
+| `grafana` | 3000 | Dashboards |
+| `loki` | 3100 | Log aggregation |
+
+---
+
+## Quick Start
+
+### Prerequisites
 
 | Tool | Version |
-|---|---|
-| JDK | 24+ |
-| Gradle | via wrapper (`./gradlew`) |
-| Docker | 20+ |
+|------|---------|
+| JDK | 21+ |
+| Docker Desktop | 20+ |
+| Skaffold | 2.0+ |
+| minikube / kind | 1.28+ |
 | kubectl | 1.28+ |
-| A Kubernetes cluster | minikube / kind / k3s / cloud |
 
----
+### Option A — Full Stack via Skaffold (Recommended)
 
-## Quick Start — Local Development
-
-There are two ways to run locally. Docker Compose is recommended — **do not** try to use the `k8s/` manifests locally unless you have minikube/kind set up.
-
----
-
-### Option A — Full Stack (everything in Docker)
-
-Builds all three services and runs the complete system with one command.
+Builds all services and deploys to local Kubernetes.
 
 ```bash
-# 1. Build all service images
-docker compose build
+# 1. Start minikube
+minikube start --cpus=4 --memory=8192
 
-# 2. Start everything
-docker compose up -d
+# 2. Lightweight services-only profile (faster, no observability stack)
+skaffold dev -p lightweight-services-only
 
-# 3. Watch logs
-docker compose logs -f
+# OR full stack with observability
+skaffold dev
 ```
 
-Services start in this order automatically (health checks enforce it):
-`postgres` → `redis + kafka` → `keycloak` → `order-service + inventory-service` → `api-gateway`
-
-> **First startup takes ~3–5 minutes** — Keycloak needs to initialize its database.
-
-After startup, set up the Keycloak realm (see [Configure Keycloak](#configure-keycloak) below), then [use the API](#using-the-api).
-
+Services start automatically. Check status:
 ```bash
-# Stop and remove containers (keep volumes/data)
-docker compose down
-
-# Stop and wipe all data
-docker compose down -v
+kubectl get pods -n microservices
+kubectl logs -n microservices -l app=order-service --tail=50
 ```
 
----
+### Option B — Infra in Docker, Services in IDE (Active Development)
 
-### Option B — Infra in Docker, Services in IDE
+Run dependencies in Docker, services from IDE for hot reload.
 
-Best for active development — run Postgres/Redis/Kafka/Keycloak in Docker, run each service from IntelliJ/terminal with hot reload.
-
-**Step 1 — Start infrastructure only:**
 ```bash
-docker compose -f docker-compose.infra.yml up -d
+# Start infra only
+skaffold dev -p lightweight-infra-only
 ```
 
-Exposed ports on `localhost`:
-| Service | Port |
-|---|---|
-| PostgreSQL | `5432` |
-| Redis | `6379` |
-| Kafka | `9094` ← use this from your machine (not 9092) |
-| Zipkin UI | `9411` |
-| Keycloak Admin | `8090` |
+Then run each service from IDE with these env vars:
 
-**Step 2 — Set up Keycloak realm** (see [Configure Keycloak](#configure-keycloak) below, using http://localhost:8090)
-
-**Step 3 — Run services** from your IDE or terminal with these env vars:
-
-**order-service** (run config / terminal export):
 ```bash
-SPRING_PROFILES_ACTIVE=local,docker
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=orders
 DB_USERNAME=postgres
-DB_PASSWORD=dbPass
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=redisPass
-KAFKA_BOOTSTRAP_SERVERS=localhost:9094
-ZIPKIN_ENDPOINT=http://localhost:9411/api/v2/spans
-JWT_ISSUER_URI=http://localhost:8090/realms/microservices
-JWT_JWK_SET_URI=http://localhost:8090/realms/microservices/protocol/openid-connect/certs
+DB_PASSWORD=postgres
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+KEYCLOAK_ISSUER_URI=http://localhost:8080/realms/microservices
 ```
-
-**inventory-service:**
-```bash
-SPRING_PROFILES_ACTIVE=local,docker
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=inventory
-DB_USERNAME=postgres
-DB_PASSWORD=dbPass
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=redisPass
-KAFKA_BOOTSTRAP_SERVERS=localhost:9094
-ZIPKIN_ENDPOINT=http://localhost:9411/api/v2/spans
-JWT_ISSUER_URI=http://localhost:8090/realms/microservices
-JWT_JWK_SET_URI=http://localhost:8090/realms/microservices/protocol/openid-connect/certs
-```
-
-**api-gateway** (add extra flags to disable K8s):
-```bash
-SPRING_PROFILES_ACTIVE=local,docker
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=redisPass
-ZIPKIN_ENDPOINT=http://localhost:9411/api/v2/spans
-JWT_ISSUER_URI=http://localhost:8090/realms/microservices
-JWT_JWK_SET_URI=http://localhost:8090/realms/microservices/protocol/openid-connect/certs
-# Override routes to point at local ports
-SPRING_CLOUD_GATEWAY_ROUTES[0]_ID=order-service
-SPRING_CLOUD_GATEWAY_ROUTES[0]_URI=http://localhost:8081
-SPRING_CLOUD_GATEWAY_ROUTES[0]_PREDICATES[0]=Path=/api/orders/**
-SPRING_CLOUD_GATEWAY_ROUTES[1]_ID=inventory-service
-SPRING_CLOUD_GATEWAY_ROUTES[1]_URI=http://localhost:8082
-SPRING_CLOUD_GATEWAY_ROUTES[1]_PREDICATES[0]=Path=/api/inventory/**
-```
-
-Then run each service:
-```bash
-cd order-service && ./gradlew bootRun
-cd inventory-service && ./gradlew bootRun
-cd api-gateway && ./gradlew bootRun
-```
-
----
 
 ### Configure Keycloak
 
-Open **http://localhost:8090** → login `admin / adminPass`.
+Open **http://localhost:8080** → login `admin / adminPass`.
 
-1. **Create realm:** "Create realm" → name: `microservices` → Save
-2. **Create client:**
-   - Clients → Create client
-   - Client ID: `microservices-client`
-   - Client authentication: **ON** → Save
-   - Credentials tab → copy **Client Secret**
-3. **Create roles:** Realm roles → `USER`, `ADMIN`
-4. **Create test user:**
-   - Users → Add user → username: `testuser` → Save
-   - Credentials → Set password (turn off Temporary)
-   - Role Mappings → assign `USER`
+1. **Create realm:** `microservices`
+2. **Create client:** `microservices-client` (Client authentication: ON, copy secret)
+3. **Create roles:** `USER`, `ADMIN`
+4. **Create user:** `testuser` with password, assign `USER` role
 
 ---
 
-### 1. Start infrastructure with Docker (manual, alternative to compose)
+## API Usage
 
-If you prefer individual `docker run` commands, see the full commands in the previous version — but Docker Compose above is simpler.
-
-### 2. Configure Keycloak
-
-Open **http://localhost:8090** → login with `admin / adminPass`.
-
-1. **Create Realm:** click "Create realm" → name it `microservices` → Save
-2. **Create Client:**
-   - Clients → Create client
-   - Client ID: `microservices-client`
-   - Client authentication: ON
-   - Authorization: ON → Save
-   - Credentials tab → copy the **Client Secret**
-3. **Add Roles:**
-   - Realm roles → Create role → `USER` → Save
-   - Create role → `ADMIN` → Save
-4. **Create a test user:**
-   - Users → Add user → Username: `testuser` → Save
-   - Credentials tab → Set password (disable "Temporary")
-   - Role Mappings → Assign `USER` role
-
-### 3. Run the services
-
-Each service needs these environment variables. Set them in your IDE run config or export in terminal:
-
-**order-service:**
-```bash
-cd order-service
-
-export DB_HOST=localhost DB_PORT=5432 DB_NAME=orders
-export DB_USERNAME=postgres DB_PASSWORD=dbPass
-export REDIS_HOST=localhost REDIS_PORT=6379 REDIS_PASSWORD=redisPass
-export KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-export ZIPKIN_ENDPOINT=http://localhost:9411/api/v2/spans
-export JWT_ISSUER_URI=http://localhost:8090/realms/microservices
-export JWT_JWK_SET_URI=http://localhost:8090/realms/microservices/protocol/openid-connect/certs
-export SPRING_PROFILES_ACTIVE=local
-
-./gradlew bootRun
-```
-
-**inventory-service:**
-```bash
-cd inventory-service
-
-export DB_HOST=localhost DB_PORT=5432 DB_NAME=inventory
-export DB_USERNAME=postgres DB_PASSWORD=dbPass
-export REDIS_HOST=localhost REDIS_PORT=6379 REDIS_PASSWORD=redisPass
-export KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-export ZIPKIN_ENDPOINT=http://localhost:9411/api/v2/spans
-export JWT_ISSUER_URI=http://localhost:8090/realms/microservices
-export JWT_JWK_SET_URI=http://localhost:8090/realms/microservices/protocol/openid-connect/certs
-export SPRING_PROFILES_ACTIVE=local
-
-./gradlew bootRun
-```
-
-**api-gateway** (disable Kubernetes discovery locally):
-```bash
-cd api-gateway
-
-export REDIS_HOST=localhost REDIS_PORT=6379 REDIS_PASSWORD=redisPass
-export ZIPKIN_ENDPOINT=http://localhost:9411/api/v2/spans
-export JWT_ISSUER_URI=http://localhost:8090/realms/microservices
-export JWT_JWK_SET_URI=http://localhost:8090/realms/microservices/protocol/openid-connect/certs
-export SPRING_CLOUD_KUBERNETES_ENABLED=false
-export SPRING_PROFILES_ACTIVE=local
-
-./gradlew bootRun
-```
-
-> **Note:** When running locally without Kubernetes, configure static routes in api-gateway by adding to your run config:
-> ```
-> SPRING_CLOUD_GATEWAY_ROUTES_0_URI=http://localhost:8081
-> SPRING_CLOUD_GATEWAY_ROUTES_1_URI=http://localhost:8082
-> ```
-
----
-
-## Deploy to Kubernetes
-
-### 1. Create namespace and shared infrastructure
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/postgres.yaml
-kubectl apply -f k8s/redis.yaml
-kubectl apply -f k8s/kafka.yaml
-kubectl apply -f k8s/zipkin.yaml
-kubectl apply -f k8s/keycloak.yaml
-
-# Wait for postgres and keycloak to be ready
-kubectl wait --for=condition=ready pod -l app=postgres -n microservices --timeout=120s
-kubectl wait --for=condition=ready pod -l app=keycloak -n microservices --timeout=180s
-```
-
-### 2. Set up Keycloak realm in Kubernetes
-
-```bash
-# Port-forward Keycloak
-kubectl port-forward -n microservices svc/keycloak 8090:8080
-
-# Follow the same Keycloak setup steps from the local section above
-# using http://localhost:8090
-```
-
-### 3. Build and push images
-
-```bash
-# Build each service (replace YOUR_REGISTRY with your registry)
-cd api-gateway && ./gradlew bootBuildImage --imageName=YOUR_REGISTRY/api-gateway:0.0.1-SNAPSHOT
-cd ../order-service && ./gradlew bootBuildImage --imageName=YOUR_REGISTRY/order-service:0.0.1-SNAPSHOT
-cd ../inventory-service && ./gradlew bootBuildImage --imageName=YOUR_REGISTRY/inventory-service:0.0.1-SNAPSHOT
-
-docker push YOUR_REGISTRY/api-gateway:0.0.1-SNAPSHOT
-docker push YOUR_REGISTRY/order-service:0.0.1-SNAPSHOT
-docker push YOUR_REGISTRY/inventory-service:0.0.1-SNAPSHOT
-```
-
-Update the `image:` field in each `k8s/deployment.yaml` to match your registry.
-
-### 4. Deploy services
-
-```bash
-kubectl apply -f api-gateway/k8s/
-kubectl apply -f order-service/k8s/
-kubectl apply -f inventory-service/k8s/
-
-# Verify all pods are running
-kubectl get pods -n microservices
-```
-
-### 5. Verify
-
-```bash
-# Check pod status
-kubectl get pods -n microservices
-
-# Check logs
-kubectl logs -n microservices -l app=order-service --tail=50
-
-# Check circuit breaker health
-kubectl port-forward -n microservices svc/order-service 8081:8081
-curl http://localhost:8081/actuator/health
-```
-
----
-
-## Using the API
-
-### Step 1 — Get a JWT token from Keycloak
+### Get JWT Token
 
 ```bash
 TOKEN=$(curl -s -X POST \
-  http://localhost:8090/realms/microservices/protocol/openid-connect/token \
+  http://localhost:8080/realms/microservices/protocol/openid-connect/token \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "grant_type=password" \
   -d "client_id=microservices-client" \
-  -d "client_secret=YOUR_CLIENT_SECRET" \
+  -d "client_secret=YOUR_SECRET" \
   -d "username=testuser" \
   -d "password=YOUR_PASSWORD" \
   | jq -r '.access_token')
-
-echo $TOKEN
 ```
 
-### Step 2 — Call the APIs
-
-All requests go through the **api-gateway on port 8080**.
-
-#### Inventory API
+### Order Service
 
 ```bash
-# Add inventory item (requires ADMIN role)
+# Create order
+curl -X POST http://localhost:8080/api/orders \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "customerId": "customer-123",
+    "items": [{
+      "productId": "PROD-001",
+      "productName": "Laptop",
+      "quantity": 2,
+      "unitPrice": 999.99
+    }]
+  }'
+
+# Get order
+curl http://localhost:8080/api/orders/{id} \
+  -H "Authorization: Bearer $TOKEN"
+
+# Update status (creates OrderStatusChangedEvent)
+curl -X PUT "http://localhost:8080/api/orders/{id}/status?status=SHIPPED" \
+  -H "Authorization: Bearer $TOKEN"
+
+# Cancel order (creates OrderCancelledEvent)
+curl -X DELETE http://localhost:8080/api/orders/{id} \
+  -H "Authorization: Bearer $TOKEN"
+
+# Verify event sourcing — check order_events table
+psql -h localhost -U postgres -d orders -c "SELECT event_type, sequence_number, published FROM order_events ORDER BY sequence_number;"
+
+# Verify CQRS — check projection
+psql -h localhost -U postgres -d orders -c "SELECT aggregate_id, status, last_event_sequence FROM order_projections;"
+```
+
+### Inventory Service
+
+```bash
+# Add item
 curl -X POST http://localhost:8080/api/inventory \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -382,14 +341,6 @@ curl -X POST http://localhost:8080/api/inventory \
     "unitPrice": 999.99
   }'
 
-# Check stock
-curl http://localhost:8080/api/inventory/product/PROD-001 \
-  -H "Authorization: Bearer $TOKEN"
-
-# List all in-stock items
-curl http://localhost:8080/api/inventory/in-stock \
-  -H "Authorization: Bearer $TOKEN"
-
 # Reserve stock
 curl -X POST http://localhost:8080/api/inventory/reserve \
   -H "Authorization: Bearer $TOKEN" \
@@ -397,44 +348,72 @@ curl -X POST http://localhost:8080/api/inventory/reserve \
   -d '{"productId": "PROD-001", "quantity": 5}'
 ```
 
-#### Order API
+### Order Status Lifecycle
 
-```bash
-# Create order
-curl -X POST http://localhost:8080/api/orders \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "customerId": "customer-123",
-    "items": [
-      {
-        "productId": "PROD-001",
-        "productName": "Laptop",
-        "quantity": 2,
-        "unitPrice": 999.99
-      }
-    ]
-  }'
-
-# Get order by ID
-curl http://localhost:8080/api/orders/{id} \
-  -H "Authorization: Bearer $TOKEN"
-
-# Get orders by customer
-curl http://localhost:8080/api/orders/customer/customer-123 \
-  -H "Authorization: Bearer $TOKEN"
-
-# Update order status (requires ADMIN role)
-curl -X PATCH "http://localhost:8080/api/orders/{id}/status?status=CONFIRMED" \
-  -H "Authorization: Bearer $TOKEN"
-
-# Cancel order
-curl -X DELETE http://localhost:8080/api/orders/{id} \
-  -H "Authorization: Bearer $TOKEN"
+```
+PENDING → CONFIRMED → PROCESSING → SHIPPED → DELIVERED
+                          │
+                          └────────────────► CANCELLED
 ```
 
-#### Order Status Values
-`PENDING` → `CONFIRMED` → `PROCESSING` → `SHIPPED` → `DELIVERED` / `CANCELLED`
+---
+
+## Testing Strategy
+
+```
+        ┌─────────────────────────┐
+        │   E2E / Integration     │  EventSourcingIntegrationTest
+        │   (slow, real infra)    │  (Testcontainers + EmbeddedKafka)
+        ├─────────────────────────┤
+        │   Real CDC Tests        │  RealCdcStubRunnerTest
+        │   (cross-service)       │  (pulls producer stubs)
+        ├─────────────────────────┤
+        │   Producer/Consumer CDC │  ProducerCdcTest, ConsumerCdcTest
+        │   (per-side)            │  (real Kafka publish/consume)
+        ├─────────────────────────┤
+        │   Contract Tests        │  OrderEventContractTest
+        │   (schema validation)   │  (manual JUnit, JSON schema)
+        ├─────────────────────────┤
+        │   Unit Tests            │  (service-level, with mocks)
+        └─────────────────────────┘
+```
+
+### Run Tests
+
+```bash
+# All tests (excluding tests requiring Docker)
+./gradlew test -x contractTest
+
+# Producer CDC tests
+cd order-service && ./gradlew test --tests "*ProducerCdcTest*"
+
+# Consumer CDC tests (manual)
+cd inventory-service && ./gradlew test --tests "*ConsumerCdcTest*"
+
+# Real Cross-Service CDC (requires producer stub jar published)
+cd order-service && ./gradlew verifierStubsJar publishToMavenLocal
+cd inventory-service && ./gradlew test --tests "*RealCdcStubRunnerTest*"
+
+# Generated contract tests (Spring Cloud Contract)
+cd order-service && ./gradlew contractTest
+```
+
+### Contract Testing Workflow
+
+**Producer changes contract:**
+```bash
+# 1. Modify groovy contract (e.g., add new field)
+vi order-service/src/test/resources/contracts/order/order_created.groovy
+
+# 2. Regenerate and publish stub jar
+cd order-service
+./gradlew verifierStubsJar publishToMavenLocal
+
+# 3. Consumer test detects breaking change
+cd ../inventory-service
+./gradlew test --tests "*RealCdcStubRunnerTest*"
+# → FAIL if consumer doesn't handle new schema
+```
 
 ---
 
@@ -443,42 +422,40 @@ curl -X DELETE http://localhost:8080/api/orders/{id} \
 ### Distributed Tracing — Zipkin
 
 ```bash
-# Local
-open http://localhost:9411
-
-# Kubernetes
 kubectl port-forward -n microservices svc/zipkin 9411:9411
 open http://localhost:9411
 ```
 
-Every request across gateway → service is traced. Search by `traceId` from response logs.
+Search by `traceId` from logs to follow a request across all services.
 
-### Health & Metrics — Actuator
+### Metrics — Prometheus + Grafana
 
 ```bash
-# Health (includes circuit breaker state)
-curl http://localhost:8081/actuator/health
-
-# Prometheus metrics
-curl http://localhost:8081/actuator/prometheus
-
-# Circuit breaker states
-curl http://localhost:8081/actuator/circuitbreakers
+kubectl port-forward -n microservices svc/grafana 3000:3000
+open http://localhost:3000  # admin/admin
 ```
 
-### Structured Logs
+Pre-configured dashboards:
+- HTTP request latency (p50/p95/p99)
+- Kafka consumer lag
+- Circuit breaker state
+- Custom: `orders.created.total`, `orders.cancelled.total`, `orders.creation.duration`
 
-In non-`local` profiles, all services output **JSON logs** with `traceId` and `spanId` fields — ready for Elasticsearch/Loki ingestion.
+### Logs — Loki + Promtail
 
-```json
-{
-  "timestamp": "2026-05-03T10:00:00.000Z",
-  "level": "INFO",
-  "service": "order-service",
-  "traceId": "4bf92f3577b34da6",
-  "spanId": "00f067aa0ba902b7",
-  "message": "Order created id=abc-123"
-}
+```bash
+# Query in Grafana → Explore → Loki
+{app="order-service"} |= "Order created"
+```
+
+All services emit structured JSON logs with `traceId` and `spanId`.
+
+### Health Endpoints
+
+```bash
+curl http://localhost:8081/actuator/health
+curl http://localhost:8081/actuator/circuitbreakers
+curl http://localhost:8081/actuator/prometheus
 ```
 
 ---
@@ -487,86 +464,162 @@ In non-`local` profiles, all services output **JSON logs** with `traceId` and `s
 
 ```
 microservices-demo/
-├── k8s/                          # Shared infrastructure
+├── k8s/                          # Shared infrastructure manifests
 │   ├── namespace.yaml
 │   ├── postgres.yaml
 │   ├── redis.yaml
 │   ├── kafka.yaml
+│   ├── keycloak.yaml
 │   ├── zipkin.yaml
-│   └── keycloak.yaml
+│   ├── prometheus.yaml
+│   ├── grafana.yaml
+│   └── loki.yaml
 │
-├── api-gateway/
-│   ├── build.gradle
-│   ├── k8s/                      # Gateway K8s manifests + Ingress
-│   └── src/main/kotlin/uz/coder/api_gateway/
-│       ├── config/
-│       │   ├── SecurityConfig.kt         # WebFlux JWT auth
-│       │   └── FallbackController.kt     # Circuit breaker fallbacks
-│       └── filter/
-│           └── LoggingGlobalFilter.kt    # Request/response logging
-│
-├── order-service/
+├── api-gateway/                  # WebFlux gateway
 │   ├── build.gradle
 │   ├── k8s/
-│   └── src/main/kotlin/uz/coder/order_service/
-│       ├── domain/       # Order, OrderItem (JPA entities)
-│       ├── dto/          # OrderRequest (validated), OrderResponse
-│       ├── repository/   # OrderRepository (Spring Data JPA)
-│       ├── service/      # OrderService (@CircuitBreaker, @Cacheable)
-│       ├── controller/   # OrderController (@PreAuthorize)
-│       ├── messaging/    # OrderEventPublisher (Kafka)
-│       ├── config/       # SecurityConfig, CacheConfig
-│       └── exception/    # GlobalExceptionHandler, OrderNotFoundException
+│   └── src/main/kotlin/uz/coder/api_gateway/
+│       ├── config/               # Security, routing, circuit breaker
+│       ├── filter/               # Logging, JWT propagation
+│       └── service/              # API composition
 │
-└── inventory-service/
+├── order-service/                # Event sourcing + CQRS
+│   ├── build.gradle              # Includes Spring Cloud Contract plugin
+│   ├── k8s/
+│   ├── src/main/kotlin/uz/coder/order_service/
+│   │   ├── domain/               # Order, OrderItem, OrderEventRecord, OrderProjection
+│   │   ├── dto/                  # OrderRequest, OrderResponse
+│   │   ├── repository/           # OrderRepository, EventStoreRepository, OrderProjectionRepository
+│   │   ├── service/              # OrderService (commands)
+│   │   ├── controller/           # REST + GraphQL
+│   │   ├── event/                # Event sourcing components
+│   │   │   ├── OrderEvent.kt
+│   │   │   ├── OrderEventType.kt
+│   │   │   ├── OrderEventStore.kt
+│   │   │   ├── OutboxPublisher.kt
+│   │   │   ├── OrderProjectionHandler.kt
+│   │   │   └── OrderProjectionSubscriber.kt
+│   │   ├── audit/                # AOP audit logging
+│   │   ├── config/               # Caching, scheduling, gRPC
+│   │   └── exception/            # Global error handling
+│   └── src/test/
+│       ├── kotlin/.../contract/  # CDC tests
+│       │   ├── OrderEventContractTest.kt
+│       │   ├── ProducerCdcTest.kt
+│       │   └── ContractVerifierBase.kt
+│       └── resources/contracts/  # Groovy contract DSL
+│           └── order/
+│               ├── order_created.groovy
+│               ├── order_status_changed.groovy
+│               └── order_cancelled.groovy
+│
+└── inventory-service/            # Kafka consumer + stock mgmt
     ├── build.gradle
     ├── k8s/
-    └── src/main/kotlin/uz/coder/inventory_service/
-        ├── domain/       # InventoryItem (JPA entity, pessimistic lock)
-        ├── dto/          # InventoryRequest, InventoryResponse, ReserveRequest
-        ├── repository/   # InventoryRepository (with @Lock for reservations)
-        ├── service/      # InventoryService (reserve/release/confirm)
-        ├── controller/   # InventoryController
-        ├── messaging/    # InventoryEventConsumer (Kafka listener)
-        ├── config/       # SecurityConfig, CacheConfig
-        └── exception/    # GlobalExceptionHandler, InsufficientStockException
+    └── src/
+        ├── main/kotlin/uz/coder/inventory_service/
+        │   ├── domain/
+        │   ├── service/
+        │   ├── controller/
+        │   ├── event/            # InventoryEventPublisher, OrderEventListener
+        │   └── grpc/             # gRPC server
+        └── test/kotlin/.../contract/
+            ├── OrderEventContractTest.kt
+            ├── ConsumerCdcTest.kt
+            └── RealCdcStubRunnerTest.kt   # ← Real CDC via stub runner
 ```
 
 ---
 
 ## Configuration Reference
 
-All services read config from **environment variables** (12-factor). In Kubernetes, these come from ConfigMaps and Secrets.
+All services read config from environment variables (12-factor). Defaults shown.
 
 | Variable | Used By | Default |
-|---|---|---|
+|----------|---------|---------|
 | `DB_HOST` | order, inventory | `localhost` |
 | `DB_PORT` | order, inventory | `5432` |
 | `DB_NAME` | order, inventory | `orders` / `inventory` |
 | `DB_USERNAME` | order, inventory | `postgres` |
-| `DB_PASSWORD` | order, inventory | — |
-| `REDIS_HOST` | all | `localhost` / `redis` |
-| `REDIS_PASSWORD` | all | — |
-| `KAFKA_BOOTSTRAP_SERVERS` | order, inventory | `localhost:9092` |
-| `JWT_ISSUER_URI` | all | `http://keycloak:8080/realms/microservices` |
-| `JWT_JWK_SET_URI` | all | `http://keycloak:8080/realms/microservices/...` |
-| `ZIPKIN_ENDPOINT` | all | `http://zipkin:9411/api/v2/spans` |
+| `DB_PASSWORD` | order, inventory | `postgres` |
+| `REDIS_HOST` | all | `redis` |
+| `REDIS_PORT` | all | `6379` |
+| `REDIS_PASSWORD` | all | `redisPass` |
+| `KAFKA_BOOTSTRAP_SERVERS` | order, inventory | `kafka:9092` |
+| `KEYCLOAK_ISSUER_URI` | all | `http://keycloak:8080/realms/microservices` |
+| `INVENTORY_SERVICE_URL` | order | `http://inventory-service:8082` |
 
 ---
 
-## Common Issues
+## Troubleshooting
 
-**`401 Unauthorized` on all requests**
-→ Check your JWT token is not expired (`jwt.io` to inspect). Verify `JWT_ISSUER_URI` matches the Keycloak realm URL exactly.
+### `401 Unauthorized` on all requests
+Check JWT token isn't expired (paste at jwt.io). Verify `KEYCLOAK_ISSUER_URI` matches realm URL exactly.
 
-**`503 Service Unavailable` from gateway**
-→ Circuit breaker is open. Check `/actuator/circuitbreakers` on the target service. Wait for the `waitDurationInOpenState` (10s) to expire.
+### `503 Service Unavailable` from gateway
+Circuit breaker open. Check `/actuator/circuitbreakers` on target. Wait `waitDurationInOpenState` (10s).
 
-**Flyway migration fails on startup**
-→ Ensure the database (`orders` or `inventory`) exists in PostgreSQL before starting the service.
+### Flyway migration fails
+Database (`orders` or `inventory`) must exist before service starts. Check `k8s/postgres.yaml` init scripts.
 
-**`Unable to connect to Kafka`**
-→ Verify `KAFKA_BOOTSTRAP_SERVERS` is reachable. In K8s, use `kafka:9092`; locally use `localhost:9092`.
+### `Unable to connect to Kafka`
+In K8s use `kafka:9092`. Locally use `localhost:9092`. For Docker Compose use `kafka:29092` (internal listener).
 
-**Spring Cloud Kubernetes fails locally**
-→ Set `SPRING_CLOUD_KUBERNETES_ENABLED=false` and `SPRING_PROFILES_ACTIVE=local` when running outside a cluster.
+### JSONB column error: "type jsonb but expression is of type character varying"
+Hibernate needs `@Type(JsonType::class)` from `hypersistence-utils-hibernate-60`. Already configured on `OrderEventRecord.payload`.
+
+### Testcontainers `Could not find valid Docker environment`
+Docker daemon issue. Verify with `docker ps`. On macOS, set:
+```bash
+echo "docker.host=unix:///Users/$USER/.docker/run/docker.sock" > ~/.testcontainers.properties
+```
+
+### Spring Cloud Contract `Plugin not found`
+The plugin uses `buildscript` block with classpath, not the standard plugins block:
+```gradle
+buildscript {
+    dependencies {
+        classpath 'org.springframework.cloud:spring-cloud-contract-gradle-plugin:4.1.3'
+    }
+}
+apply plugin: 'spring-cloud-contract'
+```
+
+### Real CDC test fails: "Producer stub jar not found"
+Producer must publish stub jar first:
+```bash
+cd order-service && ./gradlew verifierStubsJar publishToMavenLocal
+```
+
+---
+
+## Patterns Reference
+
+| Pattern | Where | Why |
+|---------|-------|-----|
+| Event Sourcing | order-service | Audit trail, time-travel debugging, immutable history |
+| Outbox | order-service | Eliminates dual-write race between DB and Kafka |
+| CQRS | order-service | Separate optimized read model from write model |
+| Saga | (future) | Distributed transactions across services |
+| Circuit Breaker | api-gateway, order-service | Prevents cascading failures |
+| Bulkhead | (Resilience4j) | Resource isolation per downstream |
+| API Composition | api-gateway | Aggregate data from multiple services in one call |
+| Database per Service | order/inventory | Service autonomy, no shared schema |
+| Strangler Fig | (future) | Gradual migration from monolith |
+| Sidecar | (future Istio) | Cross-cutting concerns externalized |
+
+---
+
+## Contributing
+
+1. Create feature branch from `main`
+2. Follow existing code style (ktlint where applicable)
+3. Add tests for new patterns
+4. Update relevant section in this README
+5. Open PR with description of pattern/feature
+
+---
+
+## License
+
+MIT — see LICENSE file.
