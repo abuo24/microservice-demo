@@ -20,6 +20,7 @@ import uz.coder.order_service.event.OrderEventStore
 import uz.coder.order_service.event.OrderStatusChangedEvent
 import uz.coder.order_service.exception.OrderNotFoundException
 import uz.coder.order_service.repository.OrderRepository
+import uz.coder.order_service.repository.OrderProjectionRepository
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
@@ -28,6 +29,7 @@ import java.util.UUID
 @Transactional(readOnly = true)
 class OrderService(
     private val orderRepository: OrderRepository,
+    private val projectionRepository: OrderProjectionRepository,
     private val meterRegistry: MeterRegistry,
     private val eventStore: OrderEventStore
 ) {
@@ -52,6 +54,16 @@ class OrderService(
         return orderRepository.findById(id)
             .map { OrderResponse.from(it) }
             .orElseThrow { OrderNotFoundException("Order not found: $id") }
+    }
+
+    fun findByIdFromProjection(id: UUID): OrderResponse {
+        log.info("Finding order from projection id={}", id)
+        val projection = projectionRepository.findByAggregateId(id)
+        if (projection != null) {
+            val order = orderRepository.findById(id).orElse(null)
+            return if (order != null) OrderResponse.from(order) else throw OrderNotFoundException("Order not found: $id")
+        }
+        return findById(id)
     }
 
     @Cacheable(cacheNames = ["orders"], key = "#customerId")
